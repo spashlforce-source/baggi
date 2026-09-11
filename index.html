@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Прокат — Гараж</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; background: #f4f5f7; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #1a1a1a; }
+  body { padding-bottom: 70px; }
+
+  /* ---- Шапка ---- */
+  header {
+    position: sticky; top: 0; z-index: 10;
+    background: #1e2a3a; color: #fff;
+    padding: 12px 16px;
+    display: flex; align-items: center; justify-content: space-between;
+    box-shadow: 0 2px 8px rgba(0,0,0,.15);
+  }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; }
+  header .user { font-size: 13px; opacity: .8; }
+  header button {
+    background: transparent; border: 1px solid rgba(255,255,255,.3);
+    color: #fff; padding: 6px 10px; border-radius: 6px; font-size: 13px; cursor: pointer;
+  }
+
+  /* ---- Нижняя навигация ---- */
+  nav {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: #fff; border-top: 1px solid #e3e6ea;
+    display: flex; z-index: 10;
+  }
+  nav button {
+    flex: 1; padding: 12px 0; border: none; background: none;
+    font-size: 12px; color: #666; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+  }
+  nav button.active { color: #2563eb; font-weight: 600; }
+  nav button .ic { font-size: 20px; }
+
+  /* ---- Контент ---- */
+  main { padding: 16px; max-width: 900px; margin: 0 auto; }
+  .card {
+    background: #fff; border-radius: 10px; padding: 14px;
+    margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  }
+  .card h3 { margin: 0 0 4px; font-size: 16px; }
+  .card .sub { color: #666; font-size: 13px; }
+  .card .status {
+    display: inline-block; padding: 2px 8px; border-radius: 999px;
+    font-size: 11px; margin-top: 6px;
+  }
+  .status.free { background: #dcfce7; color: #166534; }
+  .status.repair { background: #fef3c7; color: #92400e; }
+  .status.written_off { background: #fee2e2; color: #991b1b; }
+
+  .btn {
+    background: #2563eb; color: #fff; border: none;
+    padding: 10px 16px; border-radius: 8px; font-size: 14px;
+    cursor: pointer; font-weight: 500;
+  }
+  .btn.secondary { background: #e5e7eb; color: #1a1a1a; }
+  .btn.danger { background: #dc2626; }
+  .btn:active { opacity: .8; }
+
+  .fab {
+    position: fixed; right: 16px; bottom: 80px;
+    width: 56px; height: 56px; border-radius: 50%;
+    background: #2563eb; color: #fff; border: none;
+    font-size: 28px; line-height: 1; cursor: pointer;
+    box-shadow: 0 4px 12px rgba(37,99,235,.4);
+  }
+
+  /* ---- Форма входа ---- */
+  .login-wrap {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  .login-box {
+    background: #fff; border-radius: 12px; padding: 24px;
+    width: 100%; max-width: 360px; box-shadow: 0 4px 20px rgba(0,0,0,.08);
+  }
+  .login-box h2 { margin: 0 0 16px; text-align: center; }
+  .login-box input {
+    width: 100%; padding: 12px; margin-bottom: 10px;
+    border: 1px solid #d1d5db; border-radius: 8px; font-size: 15px;
+  }
+  .login-box .btn { width: 100%; margin-top: 6px; padding: 12px; }
+  .err { color: #dc2626; font-size: 13px; margin-top: 8px; text-align: center; min-height: 18px; }
+
+  /* ---- Модалка ---- */
+  .modal-bg {
+    position: fixed; inset: 0; background: rgba(0,0,0,.5);
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px; z-index: 100;
+  }
+  .modal {
+    background: #fff; border-radius: 12px; padding: 20px;
+    width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto;
+  }
+  .modal h3 { margin: 0 0 14px; }
+  .modal label { display: block; font-size: 13px; color: #555; margin: 10px 0 4px; }
+  .modal input, .modal select, .modal textarea {
+    width: 100%; padding: 10px; border: 1px solid #d1d5db;
+    border-radius: 8px; font-size: 14px; font-family: inherit;
+  }
+  .modal textarea { min-height: 70px; resize: vertical; }
+  .modal-actions { display: flex; gap: 8px; margin-top: 16px; }
+  .modal-actions .btn { flex: 1; }
+
+  /* ---- Логи ---- */
+  .log-item {
+    padding: 10px 12px; border-bottom: 1px solid #eef0f2; font-size: 14px;
+  }
+  .log-item:last-child { border-bottom: none; }
+  .log-item .time { color: #888; font-size: 12px; }
+  .log-item .who { color: #2563eb; font-weight: 500; }
+
+  /* ---- Пусто ---- */
+  .empty { text-align: center; color: #999; padding: 40px 20px; font-size: 14px; }
+
+  /* ---- Поиск ---- */
+  .search {
+    width: 100%; padding: 10px 14px; margin-bottom: 12px;
+    border: 1px solid #d1d5db; border-radius: 8px; font-size: 15px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ====== ЭКРАН ВХОДА ====== -->
+<div id="loginScreen" class="login-wrap" style="display:none">
+  <div class="login-box">
+    <h2>🔧 Прокат</h2>
+    <input id="loginInput" placeholder="Логин" autocomplete="username">
+    <input id="passwordInput" type="password" placeholder="Пароль" autocomplete="current-password">
+    <button class="btn" id="loginBtn">Войти</button>
+    <div class="err" id="loginErr"></div>
+  </div>
+</div>
+
+<!-- ====== ОСНОВНОЕ ПРИЛОЖЕНИЕ ====== -->
+<div id="app" style="display:none">
+  <header>
+    <div>
+      <h1 id="pageTitle">Гараж</h1>
+      <div class="user" id="userLabel"></div>
+    </div>
+    <button id="logoutBtn">Выйти</button>
+  </header>
+
+  <main id="content"></main>
+
+  <button class="fab" id="addBtn" style="display:none">+</button>
+
+  <nav>
+    <button data-view="garage" class="active">
+      <span class="ic">🚜</span><span>Гараж</span>
+    </button>
+    <button data-view="logs">
+      <span class="ic">📋</span><span>Логи</span>
+    </button>
+  </nav>
+</div>
+
+<!-- ====== МОДАЛКА ====== -->
+<div id="modalRoot"></div>
+
+<!-- ====== SUPABASE ====== -->
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const SUPABASE_URL = 'https://mieypqtkrsbtujbtlgey.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_gLuUMy49IZEgkFRjk6qMeQ_wt3cMJWG';
+
+const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ---------- состояние ----------
+const state = {
+  view: 'garage',
+  employee: null,     // {id, name, login, role}
+  techs: [],
+  logs: [],
+  search: '',
+  loaded: false
+};
+
+const $  = sel => document.querySelector(sel);
+const $$ = sel => document.querySelectorAll(sel);
+
+// ---------- утилиты ----------
+async function sha256(text) {
+  const buf = new TextEncoder().encode(text);
+  const hash = await crypto.subtle.digest('SHA-256', buf);
+  return [...new Uint8Array(hash)].map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function fmtDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleString('ru-RU', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
+}
+
+// ---------- логирование ----------
+async function addLog(action, description, entity_type = null, entity_id = null) {
+  if (!state.employee) return;
+  try {
+    await sb.from('logs').insert({
+      employee_id: state.employee.id,
+      employee_name: state.employee.name,
+      action, description, entity_type, entity_id
+    });
+  } catch(e) { console.warn('log failed', e); }
+}
+
+// ---------- вход ----------
+async function tryLogin() {
+  const login = $('#loginInput').value.trim().toLowerCase();
+  const pass  = $('#passwordInput').value;
+  $('#loginErr').textContent = '';
+
+  if (!login || !pass) { $('#loginErr').textContent = 'Введите логин и пароль'; return; }
+
+  const hash = await sha256(pass);
+
+  const { data, error } = await sb
+    .from('employees')
+    .select('id, login, name, role, password_hash')
+    .eq('login', login)
+    .maybeSingle();
+
+  if (error) { $('#loginErr').textContent = 'Ошибка: ' + error.message; return; }
+  if (!data) { $('#loginErr').textContent = 'Пользователь не найден'; return; }
+  if (data.password_hash !== hash) { $('#loginErr').textContent = 'Неверный пароль'; return; }
+
+  const emp = { id: data.id, login: data.login, name: data.name, role: data.role };
+  localStorage.setItem('rental_employee', JSON.stringify(emp));
+  state.employee = emp;
+  await startApp();
+}
+
+function logout() {
+  localStorage.removeItem('rental_employee');
+  state.employee = null;
+  $('#app').style.display = 'none';
+  $('#loginScreen').style.display = 'flex';
+  $('#loginInput').value = '';
+  $('#passwordInput').value = '';
+}
+
+// ---------- загрузка данных ----------
+async function loadAll() {
+  const [techs, logs] = await Promise.all([
+    sb.from('techs').select('*').order('created_at', {ascending:false}),
+    sb.from('logs').select('*').order('created_at', {ascending:false}).limit(300)
+  ]);
+  state.techs = techs.data || [];
+  state.logs  = logs.data || [];
+  state.loaded = true;
+}
+
+// ---------- рендер ----------
+function render() {
+  $('#pageTitle').textContent = state.view === 'garage' ? 'Гараж' : 'Логи';
+  $('#userLabel').textContent = state.employee ? state.employee.name : '';
+  $('#addBtn').style.display = state.view === 'garage' ? 'block' : 'none';
+
+  $$('nav button').forEach(b => b.classList.toggle('active', b.dataset.view === state.view));
+
+  if (state.view === 'garage') renderGarage();
+  else if (state.view === 'logs') renderLogs();
+}
+
+function renderGarage() {
+  const q = state.search.toLowerCase();
+  const list = state.techs.filter(t =>
+    !q || (t.name + ' ' + (t.number||'') + ' ' + (t.category||'')).toLowerCase().includes(q)
+  );
+
+  let html = `<input class="search" id="searchInput" placeholder="Поиск техники..." value="${esc(state.search)}">`;
+
+  if (!list.length) {
+    html += `<div class="empty">Пока нет техники.<br>Нажми «+» чтобы добавить.</div>`;
+  } else {
+    for (const t of list) {
+      const st = {free:'Свободна', repair:'В ремонте', written_off:'Списана'}[t.status] || t.status;
+      html += `
+        <div class="card" data-tech="${t.id}">
+          <h3>${esc(t.name)}</h3>
+          <div class="sub">№ ${esc(t.number || '—')}${t.category ? ' · ' + esc(t.category) : ''}</div>
+          <span class="status ${t.status}">${st}</span>
+        </div>`;
+    }
+  }
+  $('#content').innerHTML = html;
+
+  const si = $('#searchInput');
+  if (si) {
+    si.oninput = e => {
+      state.search = e.target.value;
+      const pos = e.target.selectionStart;
+      renderGarage();
+      const ni = $('#searchInput');
+      if (ni) { ni.focus(); ni.setSelectionRange(pos, pos); }
+    };
+  }
+
+  $$('[data-tech]').forEach(el => {
+    el.onclick = () => openTechModal(el.dataset.tech);
+  });
+}
+
+function renderLogs() {
+  if (!state.logs.length) {
+    $('#content').innerHTML = `<div class="empty">Пока нет записей.</div>`;
+    return;
+  }
+  let html = '';
+  for (const l of state.logs) {
+    html += `
+      <div class="log-item">
+        <div><span class="who">${esc(l.employee_name || '—')}</span> — ${esc(l.description)}</div>
+        <div class="time">${fmtDate(l.created_at)}</div>
+      </div>`;
+  }
+  $('#content').innerHTML = html;
+}
+
+// ---------- модалка ----------
+function openModal(title, fields, values = {}, onSave) {
+  const root = $('#modalRoot');
+  let fieldsHtml = fields.map(f => {
+    const v = values[f.name] ?? '';
+    if (f.type === 'textarea') {
+      return `<label>${esc(f.label)}</label><textarea name="${f.name}" ${f.required?'required':''}>${esc(v)}</textarea>`;
+    }
+    if (f.type === 'select') {
+      const opts = f.options.map(o => `<option value="${esc(o.value)}" ${o.value===v?'selected':''}>${esc(o.label)}</option>`).join('');
+      return `<label>${esc(f.label)}</label><select name="${f.name}">${opts}</select>`;
+    }
+    return `<label>${esc(f.label)}</label><input name="${f.name}" type="${f.type||'text'}" value="${esc(v)}" ${f.required?'required':''}>`;
+  }).join('');
+
+  root.innerHTML = `
+    <div class="modal-bg">
+      <div class="modal">
+        <h3>${esc(title)}</h3>
+        <form id="modalForm">${fieldsHtml}
+          <div class="modal-actions">
+            <button type="button" class="btn secondary" id="modalCancel">Отмена</button>
+            <button type="submit" class="btn">Сохранить</button>
+          </div>
+        </form>
+      </div>
+    </div>`;
+
+  $('#modalCancel').onclick = closeModal;
+  $('#modalForm').onsubmit = async e => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const obj = {};
+    for (const [k,v] of fd.entries()) obj[k] = v;
+    await onSave(obj);
+    closeModal();
+  };
+}
+
+function closeModal() { $('#modalRoot').innerHTML = ''; }
+
+// ---------- добавить технику ----------
+function addTech() {
+  openModal('Новая техника', [
+    {name:'name',     label:'Название',            required:true},
+    {name:'number',   label:'Инвентарный номер',   required:true},
+    {name:'category', label:'Категория'},
+    {name:'status',   label:'Статус', type:'select', options:[
+      {value:'free',        label:'Свободна'},
+      {value:'repair',      label:'В ремонте'},
+      {value:'written_off', label:'Списана'}
+    ]},
+    {name:'notes',    label:'Заметки', type:'textarea'}
+  ], {status:'free'}, async obj => {
+    const { data, error } = await sb.from('techs').insert(obj).select().single();
+    if (error) { alert('Ошибка: ' + error.message); return; }
+    await addLog('add_tech', `Добавил технику: ${obj.name} (№${obj.number})`, 'tech', data.id);
+    await loadAll();
+    render();
+  });
+}
+
+// ---------- карточка техники ----------
+function openTechModal(id) {
+  const t = state.techs.find(x => x.id === id);
+  if (!t) return;
+  openModal('Редактировать технику', [
+    {name:'name',     label:'Название',          required:true},
+    {name:'number',   label:'Инвентарный номер', required:true},
+    {name:'category', label:'Категория'},
+    {name:'status',   label:'Статус', type:'select', options:[
+      {value:'free',        label:'Свободна'},
+      {value:'repair',      label:'В ремонте'},
+      {value:'written_off', label:'Списана'}
+    ]},
+    {name:'notes',    label:'Заметки', type:'textarea'}
+  ], t, async obj => {
+    const { error } = await sb.from('techs').update(obj).eq('id', id);
+    if (error) { alert('Ошибка: ' + error.message); return; }
+    await addLog('edit_tech', `Изменил технику: ${obj.name} (№${obj.number})`, 'tech', id);
+    await loadAll();
+    render();
+  });
+
+  // добавляем кнопку удаления
+  const actions = $('.modal-actions');
+  const delBtn = document.createElement('button');
+  delBtn.type = 'button';
+  delBtn.className = 'btn danger';
+  delBtn.textContent = 'Удалить';
+  delBtn.onclick = async () => {
+    if (!confirm('Удалить технику?')) return;
+    const { error } = await sb.from('techs').delete().eq('id', id);
+    if (error) { alert('Ошибка: ' + error.message); return; }
+    await addLog('del_tech', `Удалил технику: ${t.name} (№${t.number})`, 'tech', id);
+    closeModal();
+    await loadAll();
+    render();
+  };
+  actions.insertBefore(delBtn, actions.firstChild);
+}
+
+// ---------- запуск приложения ----------
+async function startApp() {
+  $('#loginScreen').style.display = 'none';
+  $('#app').style.display = 'block';
+  await loadAll();
+  render();
+  subscribeRealtime();
+}
+
+// ---------- realtime ----------
+let realtimeStarted = false;
+function subscribeRealtime() {
+  if (realtimeStarted) return;
+  realtimeStarted = true;
+  const reload = async () => { await loadAll(); render(); };
+
+  sb.channel('db-changes')
+    .on('postgres_changes', {event:'*', schema:'public', table:'techs'}, reload)
+    .on('postgres_changes', {event:'*', schema:'public', table:'logs'}, reload)
+    .subscribe();
+}
+
+// ---------- события ----------
+$('#loginBtn').onclick = tryLogin;
+$('#passwordInput').onkeydown = e => { if (e.key === 'Enter') tryLogin(); };
+$('#loginInput').onkeydown   = e => { if (e.key === 'Enter') $('#passwordInput').focus(); };
+
+$('#logoutBtn').onclick = () => {
+  if (confirm('Выйти?')) logout();
+};
+
+$('#addBtn').onclick = () => {
+  if (state.view === 'garage') addTech();
+};
+
+$$('nav button').forEach(b => {
+  b.onclick = () => { state.view = b.dataset.view; render(); };
+});
+
+// ---------- автологин ----------
+(async function init() {
+  const saved = localStorage.getItem('rental_employee');
+  if (saved) {
+    try {
+      state.employee = JSON.parse(saved);
+      await startApp();
+      return;
+    } catch(e) { localStorage.removeItem('rental_employee'); }
+  }
+  $('#loginScreen').style.display = 'flex';
+})();
+</script>
+</body>
+</html>
