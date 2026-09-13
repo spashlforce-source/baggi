@@ -17,14 +17,7 @@
   nav button { flex: 1; padding: 12px 0; border: none; background: none; font-size: 12px; color: #666; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; }
   nav button.active { color: #2563eb; font-weight: 600; }
   nav button .ic { font-size: 20px; }
-  .back-float {
-    position: fixed; bottom: 72px; left: 50%; transform: translateX(-50%);
-    background: #1e2a3a; color: #fff; border: none;
-    padding: 10px 22px; border-radius: 999px;
-    font-size: 14px; font-weight: 500; cursor: pointer;
-    box-shadow: 0 4px 14px rgba(0,0,0,.25); z-index: 11;
-    display: flex; align-items: center; gap: 6px;
-  }
+  .back-float { position: fixed; bottom: 72px; left: 50%; transform: translateX(-50%); background: #1e2a3a; color: #fff; border: none; padding: 10px 22px; border-radius: 999px; font-size: 14px; font-weight: 500; cursor: pointer; box-shadow: 0 4px 14px rgba(0,0,0,.25); z-index: 11; display: flex; align-items: center; gap: 6px; }
   .back-float:active { opacity: .8; }
   main { padding: 16px; max-width: 900px; margin: 0 auto; }
   .card { background: #fff; border-radius: 10px; padding: 14px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06); cursor: pointer; }
@@ -99,6 +92,11 @@
   .radio-row { display: flex; gap: 8px; margin-bottom: 6px; }
   .radio-opt { flex: 1; padding: 10px; text-align: center; border: 2px solid #d1d5db; border-radius: 8px; cursor: pointer; font-size: 13px; background: #fff; }
   .radio-opt.active { border-color: #2563eb; background: #eff6ff; color: #2563eb; font-weight: 600; }
+  .fixed-cat {
+    padding: 10px 12px; background: #f3f4f6; border-radius: 8px;
+    font-size: 13px; color: #555; margin-top: 4px;
+  }
+  .fixed-cat strong { color: #1a1a1a; }
 </style>
 </head>
 <body>
@@ -647,9 +645,7 @@ function openOrderPartFromTech(tech) {
     <input id="np_shop" placeholder="Например, Ozon">
     <label>Заметки</label>
     <textarea id="np_notes"></textarea>
-    <div class="sub" style="color:#888;font-size:12px;margin-top:6px">
-      ${catName ? `Запчасть будет привязана к категории «${esc(catName)}»` : 'У техники нет категории — запчасть будет универсальной'}
-    </div>
+    ${catName ? `<div class="fixed-cat">Категория: <strong>${esc(catName)}</strong></div>` : '<div class="fixed-cat">Без категории (универсальная)</div>'}
   </div>
   <div id="pickBlock" style="display:none">
     <label>Выберите запчасть со склада</label>
@@ -689,7 +685,6 @@ function openOrderPartFromTech(tech) {
     $('#optNew').onclick = () => setMode('new');
     $('#optPick').onclick = () => setMode('pick');
 
-    // Количество +/-
     const bindQty = (minusId, plusId, inputId) => {
       $(minusId).onclick = () => { const i = $(inputId); i.value = Math.max(1, (+i.value||1) - 1); };
       $(plusId).onclick  = () => { const i = $(inputId); i.value = (+i.value||1) + 1; };
@@ -697,7 +692,6 @@ function openOrderPartFromTech(tech) {
     bindQty('#npMinus', '#npPlus', '#np_qty');
     bindQty('#pMinus', '#pPlus', '#p_qty');
 
-    // Список запчастей со склада
     const partsList = state.parts.filter(p => {
       if (tech.category_id) {
         if (!p.category_ids || !p.category_ids.length) return true;
@@ -738,14 +732,12 @@ function openOrderPartFromTech(tech) {
         const shop = $('#np_shop').value.trim();
         const notes = $('#np_notes').value.trim();
 
-        // Создаём запчасть
         const catIds = tech.category_id ? [tech.category_id] : [];
         const { data: newPart, error: e1 } = await sb.from('parts').insert({
           name, in_stock: 0, ordered: qty, price_unit: price, notes: '', category_ids: catIds
         }).select().single();
         if (e1) { alert('Ошибка создания: ' + e1.message); return; }
 
-        // Создаём заказ
         await sb.from('orders').insert({
           part_id: newPart.id, part_name: name,
           shop_label: shop, shop_url: '',
@@ -792,6 +784,7 @@ function openPartForm(p) {
   const title = isNew ? 'Новая запчасть' : 'Запчасть: ' + p.name;
   const pCats = p?.category_ids || [];
   const presetCat = isNew && state.whCat && state.whCat !== '__none__' ? state.whCat : null;
+  const fixedCat = isNew && state.whCat && state.whCat !== '__none__' ? state.categories.find(c => c.id === state.whCat) : null;
 
   let html = `
     <label>Название</label><input id="p_name" value="${esc(p?.name || '')}">
@@ -802,15 +795,24 @@ function openPartForm(p) {
     <label>Заметки</label><textarea id="p_notes">${esc(p?.notes || '')}</textarea>
     <label>Ссылки на магазины</label>
     <div id="linksBox"></div>
-    ${!isNew ? `<button class="btn secondary small" id="addLinkBtn" style="margin-top:4px">+ Добавить ссылку</button>` : '<div class="sub" style="color:#999;font-size:12px;margin-top:4px">Можно добавить после сохранения</div>'}
-    <label>Для какой техники (если ничего — универсальная)</label>
-    <div class="cat-list" id="catList">
-      ${state.categories.map(c => {
-        const checked = pCats.includes(c.id) || (presetCat === c.id);
-        return `<div class="cat-item"><label class="cat-label"><input type="checkbox" value="${c.id}" ${checked?'checked':''}><span>${esc(c.name)}</span></label><button class="btn small danger" data-delcat="${c.id}" style="padding:2px 8px;font-size:12px">×</button></div>`;
-      }).join('') || '<div style="color:#999;padding:6px">Категорий пока нет</div>'}
-    </div>
-    <button class="btn secondary small" id="addCatBtn" style="margin-top:6px">+ Новая категория</button>`;
+    ${!isNew ? `<button class="btn secondary small" id="addLinkBtn" style="margin-top:4px">+ Добавить ссылку</button>` : '<div class="sub" style="color:#999;font-size:12px;margin-top:4px">Можно добавить после сохранения</div>'}`;
+
+  // Показываем блок категорий ТОЛЬКО при редактировании
+  if (!isNew) {
+    html += `<label>Для какой техники (если ничего — универсальная)</label>
+      <div class="cat-list" id="catList">
+        ${state.categories.map(c => `<div class="cat-item"><label class="cat-label"><input type="checkbox" value="${c.id}" ${pCats.includes(c.id)?'checked':''}><span>${esc(c.name)}</span></label><button class="btn small danger" data-delcat="${c.id}" style="padding:2px 8px;font-size:12px">×</button></div>`).join('') || '<div style="color:#999;padding:6px">Категорий пока нет</div>'}
+      </div>
+      <button class="btn secondary small" id="addCatBtn" style="margin-top:6px">+ Новая категория</button>`;
+  } else if (fixedCat) {
+    // При создании внутри категории — просто показываем, куда попадёт
+    html += `<label>Категория</label>
+      <div class="fixed-cat">Запчасть будет привязана к: <strong>${esc(fixedCat.name)}</strong></div>`;
+  } else {
+    // При создании вне категории (из главного склада или универсальных)
+    html += `<label>Категория</label>
+      <div class="fixed-cat">Без категории (универсальная) — можно изменить после сохранения</div>`;
+  }
 
   if (!isNew) {
     html += `<div style="margin-top:18px;border-top:1px solid #e5e7eb;padding-top:14px">
@@ -832,6 +834,7 @@ function openPartForm(p) {
 
     const renderCatList = (checked) => {
       const box = $('#catList');
+      if (!box) return;
       box.innerHTML = state.categories.map(c => `<div class="cat-item"><label class="cat-label"><input type="checkbox" value="${c.id}" ${checked.includes(c.id)?'checked':''}><span>${esc(c.name)}</span></label><button class="btn small danger" data-delcat="${c.id}" style="padding:2px 8px;font-size:12px">×</button></div>`).join('') || '<div style="color:#999;padding:6px">Категорий пока нет</div>';
       bindCatDel();
     };
@@ -846,7 +849,8 @@ function openPartForm(p) {
     };
     bindCatDel();
 
-    $('#addCatBtn').onclick = async () => {
+    const addCatBtn = $('#addCatBtn');
+    if (addCatBtn) addCatBtn.onclick = async () => {
       const name = prompt('Название категории:');
       if (!name?.trim()) return;
       const checked = [...$('#catList').querySelectorAll('input:checked')].map(x => x.value);
@@ -877,7 +881,13 @@ function openPartForm(p) {
     }
 
     $('#saveBtn').onclick = async () => {
-      const checked = [...$('#catList').querySelectorAll('input:checked')].map(x => x.value);
+      let checked;
+      if (isNew) {
+        // При создании — категория берётся из preset или пустая
+        checked = presetCat ? [presetCat] : [];
+      } else {
+        checked = [...$('#catList').querySelectorAll('input:checked')].map(x => x.value);
+      }
       const obj = {
         name: $('#p_name').value.trim(),
         in_stock: Math.max(0, parseInt($('#p_stock').value) || 0),
