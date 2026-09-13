@@ -8,22 +8,26 @@
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; padding: 0; background: #f4f5f7; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #1a1a1a; }
   body { padding-bottom: 70px; }
-  header { position: sticky; top: 0; z-index: 10; background: #1e2a3a; color: #fff; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 8px rgba(0,0,0,.15); }
+  header { position: sticky; top: 0; z-index: 10; background: #1e2a3a; color: #fff; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 8px rgba(0,0,0,.15); gap: 8px; }
   header h1 { font-size: 18px; margin: 0; font-weight: 600; }
   header .user { font-size: 13px; opacity: .8; }
+  header .back { background: transparent; border: none; color: #fff; font-size: 22px; cursor: pointer; padding: 0 8px 0 0; }
   header button { background: transparent; border: 1px solid rgba(255,255,255,.3); color: #fff; padding: 6px 10px; border-radius: 6px; font-size: 13px; cursor: pointer; }
+  .hdr-left { display: flex; align-items: center; gap: 4px; }
   nav { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #e3e6ea; display: flex; z-index: 10; }
   nav button { flex: 1; padding: 12px 0; border: none; background: none; font-size: 12px; color: #666; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; }
   nav button.active { color: #2563eb; font-weight: 600; }
   nav button .ic { font-size: 20px; }
   main { padding: 16px; max-width: 900px; margin: 0 auto; }
-  .card { background: #fff; border-radius: 10px; padding: 14px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .card { background: #fff; border-radius: 10px; padding: 14px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06); cursor: pointer; }
   .card h3 { margin: 0 0 4px; font-size: 16px; }
   .card .sub { color: #666; font-size: 13px; }
   .card .status { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; margin-top: 6px; }
   .status.free { background: #dcfce7; color: #166534; }
   .status.repair { background: #fef3c7; color: #92400e; }
   .status.written_off { background: #fee2e2; color: #991b1b; }
+  .cat-card { display: flex; align-items: center; justify-content: space-between; }
+  .cat-card .count { color: #888; font-size: 13px; }
   .tag { display: inline-block; background: #eef2ff; color: #3730a3; font-size: 11px; padding: 2px 8px; border-radius: 6px; margin: 2px 4px 2px 0; }
   .tag.universal { background: #f0fdf4; color: #166534; }
   .num-badge { display: inline-block; background: #1e2a3a; color: #fff; font-size: 12px; padding: 3px 9px; border-radius: 6px; margin-right: 6px; font-weight: 600; }
@@ -103,9 +107,12 @@
 
 <div id="app" style="display:none">
   <header>
-    <div>
-      <h1 id="pageTitle">Гараж</h1>
-      <div class="user" id="userLabel"></div>
+    <div class="hdr-left">
+      <button class="back" id="backBtn" style="display:none">←</button>
+      <div>
+        <h1 id="pageTitle">Гараж</h1>
+        <div class="user" id="userLabel"></div>
+      </div>
     </div>
     <button id="logoutBtn">Выйти</button>
   </header>
@@ -125,14 +132,13 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const SUPABASE_URL = 'https://mieypqtkrsbtujbtlgey.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_gLuUMy49IZEgkFRjk6qMeQ_wt3cMJWG';
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
-const state = { view: 'garage', whTab: 'parts', emp: null, techs: [], parts: [], categories: [], links: [], installations: [], orders: [], logs: [], search: '', catFilter: null, orderFilter: 'all' };
+const state = { view: 'garage', garageCat: null, whTab: 'parts', emp: null, techs: [], parts: [], categories: [], links: [], installations: [], orders: [], logs: [], search: '', catFilter: null, orderFilter: 'all' };
 const $  = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
 
 async function sha256(t) { const b = new TextEncoder().encode(t); const h = await crypto.subtle.digest('SHA-256', b); return [...new Uint8Array(h)].map(x => x.toString(16).padStart(2,'0')).join(''); }
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmtDate(iso) { if (!iso) return ''; return new Date(iso).toLocaleString('ru-RU', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'}); }
-function fmtDay(iso) { if (!iso) return ''; return new Date(iso).toLocaleDateString('ru-RU', {day:'2-digit', month:'2-digit', year:'numeric'}); }
 function money(n) { return (Math.round(n||0)).toLocaleString('ru-RU') + ' ₽'; }
 
 async function addLog(action, description, entity_type = null, entity_id = null) {
@@ -166,7 +172,7 @@ function logout() {
 
 async function loadAll() {
   const [techs, parts, cats, links, insts, orders, logs] = await Promise.all([
-    sb.from('techs').select('*').order('created_at', {ascending:false}),
+    sb.from('techs').select('*').order('name'),
     sb.from('parts').select('*').order('name'),
     sb.from('categories').select('*').order('name'),
     sb.from('part_links').select('*'),
@@ -185,39 +191,118 @@ async function loadAll() {
 
 function render() {
   const titles = {garage:'Гараж', warehouse:'Склад', logs:'Логи'};
-  $('#pageTitle').textContent = titles[state.view];
+  let title = titles[state.view];
+  if (state.view === 'garage' && state.garageCat) {
+    const c = state.categories.find(x => x.id === state.garageCat);
+    title = c ? c.name : 'Гараж';
+  }
+  $('#pageTitle').textContent = title;
+
+  const showBack = state.view === 'garage' && state.garageCat;
+  $('#backBtn').style.display = showBack ? 'block' : 'none';
+
   $('#userLabel').textContent = state.emp.name;
-  $('#addBtn').style.display = state.view === 'garage' ? 'block' : (state.view === 'warehouse' && state.whTab === 'parts' ? 'block' : 'none');
+
+  let showFab = false;
+  if (state.view === 'garage') showFab = true;
+  else if (state.view === 'warehouse' && state.whTab === 'parts') showFab = true;
+  $('#addBtn').style.display = showFab ? 'block' : 'none';
+
   $$('nav button').forEach(b => b.classList.toggle('active', b.dataset.view === state.view));
+
   if (state.view === 'garage') renderGarage();
   else if (state.view === 'warehouse') renderWarehouse();
   else if (state.view === 'logs') renderLogs();
 }
 
+// ============ ГАРАЖ ============
 function renderGarage() {
+  if (!state.garageCat) renderGarageCategories();
+  else renderGarageTechs();
+}
+
+function renderGarageCategories() {
   const q = state.search.toLowerCase();
-  const list = state.techs.filter(t => !q || (t.name + ' ' + (t.number||'')).toLowerCase().includes(q));
+  const cats = state.categories.filter(c => !q || c.name.toLowerCase().includes(q));
+  const noCatCount = state.techs.filter(t => !t.category_id).length;
+
+  let html = `<input class="search" id="searchInput" placeholder="Поиск категорий..." value="${esc(state.search)}">`;
+
+  if (!cats.length && !noCatCount) {
+    html += `<div class="empty">Пока нет категорий.<br>Нажми «+» чтобы создать.</div>`;
+  } else {
+    for (const c of cats) {
+      const count = state.techs.filter(t => t.category_id === c.id).length;
+      html += `<div class="card cat-card" data-cat="${c.id}">
+        <h3>${esc(c.name)}</h3>
+        <span class="count">${count} шт</span>
+      </div>`;
+    }
+    if (noCatCount) {
+      html += `<div class="card cat-card" data-cat="__none__">
+        <h3 style="color:#888">Без категории</h3>
+        <span class="count">${noCatCount} шт</span>
+      </div>`;
+    }
+  }
+  $('#content').innerHTML = html;
+
+  const si = $('#searchInput');
+  if (si) si.oninput = e => {
+    state.search = e.target.value;
+    const p = e.target.selectionStart;
+    renderGarageCategories();
+    const ni = $('#searchInput');
+    if (ni) { ni.focus(); ni.setSelectionRange(p, p); }
+  };
+
+  $$('[data-cat]').forEach(el => el.onclick = () => {
+    state.garageCat = el.dataset.cat === '__none__' ? '__none__' : el.dataset.cat;
+    state.search = '';
+    render();
+  });
+}
+
+function renderGarageTechs() {
+  const q = state.search.toLowerCase();
+  let list;
+  if (state.garageCat === '__none__') list = state.techs.filter(t => !t.category_id);
+  else list = state.techs.filter(t => t.category_id === state.garageCat);
+  list = list.filter(t => !q || (t.name + ' ' + (t.number||'')).toLowerCase().includes(q));
+
+  // сортировка: ремонт → свободна → списана, внутри по имени
+  const order = {repair:0, free:1, written_off:2};
+  list.sort((a,b) => (order[a.status]??9) - (order[b.status]??9) || a.name.localeCompare(b.name));
+
   let html = `<input class="search" id="searchInput" placeholder="Поиск техники..." value="${esc(state.search)}">`;
+
   if (!list.length) {
     html += `<div class="empty">Пока нет техники.<br>Нажми «+» чтобы добавить.</div>`;
   } else {
     for (const t of list) {
-      const cat = state.categories.find(c => c.id === t.category_id);
       const st = {free:'Свободна', repair:'В ремонте', written_off:'Списана'}[t.status] || t.status;
       const instCount = state.installations.filter(i => i.tech_id === t.id && !i.cancelled_at).length;
       html += `<div class="card" data-tech="${t.id}">
         <h3>${esc(t.name)}</h3>
-        <div class="sub">№ ${esc(t.number || '—')}${cat ? ' · ' + esc(cat.name) : ''}${instCount ? ' · 🔧 ' + instCount : ''}</div>
+        <div class="sub">№ ${esc(t.number || '—')}${instCount ? ' · 🔧 ' + instCount : ''}</div>
         <span class="status ${t.status}">${st}</span>
       </div>`;
     }
   }
   $('#content').innerHTML = html;
+
   const si = $('#searchInput');
-  if (si) si.oninput = e => { state.search = e.target.value; const p = e.target.selectionStart; renderGarage(); const ni = $('#searchInput'); if (ni) { ni.focus(); ni.setSelectionRange(p, p); } };
+  if (si) si.oninput = e => {
+    state.search = e.target.value;
+    const p = e.target.selectionStart;
+    renderGarageTechs();
+    const ni = $('#searchInput');
+    if (ni) { ni.focus(); ni.setSelectionRange(p, p); }
+  };
   $$('[data-tech]').forEach(el => el.onclick = () => openTechModal(el.dataset.tech));
 }
 
+// ============ СКЛАД ============
 function renderWarehouse() {
   const tabsHtml = `<div class="tabs-top">
     <div class="tab-top ${state.whTab==='parts'?'active':''}" id="tabParts">📦 Склад</div>
@@ -230,7 +315,7 @@ function renderWarehouse() {
     for (const c of state.categories) {
       chips += `<div class="cat-chip ${state.catFilter === c.id ? 'active' : ''}" data-cat="${c.id}">${esc(c.name)}</div>`;
     }
-    chips += `<div class="cat-chip add" id="addCatChip">+ Категория</div></div>`;
+    chips += `</div>`;
 
     let list = state.parts.filter(p => {
       if (q && !p.name.toLowerCase().includes(q)) return false;
@@ -267,11 +352,9 @@ function renderWarehouse() {
     const si = $('#searchInput');
     if (si) si.oninput = e => { state.search = e.target.value; const pos = e.target.selectionStart; renderWarehouse(); const ni = $('#searchInput'); if (ni) { ni.focus(); ni.setSelectionRange(pos, pos); } };
     $$('[data-cat]').forEach(el => el.onclick = () => { const v = el.dataset.cat; state.catFilter = v === 'all' ? null : v; renderWarehouse(); });
-    $('#addCatChip').onclick = addCategoryPrompt;
     $$('[data-part]').forEach(el => el.onclick = (e) => { if (e.target.closest('[data-pickup]')) return; openPartModal(el.dataset.part); });
     $$('[data-pickup]').forEach(el => el.onclick = (e) => { e.stopPropagation(); openPickupDialog(el.dataset.pickup); });
   } else {
-    // ЗАКАЗЫ
     const filter = state.orderFilter;
     const now = new Date();
     let list = state.orders;
@@ -336,14 +419,49 @@ function openModal(title, html, onMount) {
 function closeModal() { $('#modalRoot').innerHTML = ''; }
 
 // ============ КАТЕГОРИИ ============
-async function addCategoryPrompt() {
-  const name = prompt('Название категории:');
-  if (!name?.trim()) return;
-  const { data, error } = await sb.from('categories').insert({name: name.trim()}).select().single();
-  if (error) { alert('Ошибка: ' + error.message); return; }
-  await addLog('add_category', `Добавил категорию: ${data.name}`, 'category', data.id);
-  await loadAll();
-  render();
+function openCategoryForm(cat) {
+  const isNew = !cat;
+  const title = isNew ? 'Новая категория' : 'Категория: ' + cat.name;
+  let html = `<label>Название</label><input id="c_name" value="${esc(cat?.name || '')}">`;
+  html += `<div class="modal-actions">
+    ${!isNew ? '<button class="btn danger" id="delBtn">Удалить</button>' : ''}
+    <button class="btn secondary" id="cancelBtn">Отмена</button>
+    <button class="btn" id="saveBtn">Сохранить</button></div>`;
+  openModal(title, html, () => {
+    $('#cancelBtn').onclick = closeModal;
+    $('#saveBtn').onclick = async () => {
+      const name = $('#c_name').value.trim();
+      if (!name) { alert('Введи название'); return; }
+      if (isNew) {
+        const { error } = await sb.from('categories').insert({name});
+        if (error) { alert('Ошибка: ' + error.message); return; }
+        await addLog('add_category', `Добавил категорию: ${name}`, 'category');
+      } else {
+        const { error } = await sb.from('categories').update({name}).eq('id', cat.id);
+        if (error) { alert('Ошибка: ' + error.message); return; }
+        await addLog('edit_category', `Изменил категорию: ${name}`, 'category', cat.id);
+      }
+      await loadAll(); render(); closeModal();
+    };
+    if (!isNew) {
+      $('#delBtn').onclick = async () => {
+        const usedByTechs = state.techs.filter(t => t.category_id === cat.id);
+        const usedByParts = state.parts.filter(p => (p.category_ids || []).includes(cat.id));
+        if (usedByTechs.length || usedByParts.length) {
+          const msgs = [];
+          if (usedByTechs.length) msgs.push(`техники: ${usedByTechs.map(t => t.name).join(', ')}`);
+          if (usedByParts.length) msgs.push(`запчастей: ${usedByParts.map(p => p.name).join(', ')}`);
+          alert('Нельзя удалить категорию — она используется:\n' + msgs.join('\n'));
+          return;
+        }
+        if (!confirm(`Удалить категорию «${cat.name}»?`)) return;
+        const { error } = await sb.from('categories').delete().eq('id', cat.id);
+        if (error) { alert('Ошибка: ' + error.message); return; }
+        await addLog('del_category', `Удалил категорию: ${cat.name}`, 'category', cat.id);
+        await loadAll(); render(); closeModal();
+      };
+    }
+  });
 }
 
 async function deleteCategory(id) {
@@ -355,7 +473,7 @@ async function deleteCategory(id) {
     const msgs = [];
     if (usedByTechs.length) msgs.push(`техники: ${usedByTechs.map(t => t.name).join(', ')}`);
     if (usedByParts.length) msgs.push(`запчастей: ${usedByParts.map(p => p.name).join(', ')}`);
-    alert('Нельзя удалить категорию — она используется:\n' + msgs.join('\n') + '\n\nСначала уберите её из этих записей.');
+    alert('Нельзя удалить категорию — она используется:\n' + msgs.join('\n'));
     return;
   }
   if (!confirm(`Удалить категорию «${cat.name}»?`)) return;
@@ -373,15 +491,17 @@ function openTechModal(id) { openTechForm(state.techs.find(t => t.id === id)); }
 function openTechForm(t) {
   const isNew = !t;
   const title = isNew ? 'Новая техника' : 'Техника: ' + t.name;
+  // если внутри категории — предустановим её
+  const presetCat = isNew && state.garageCat && state.garageCat !== '__none__' ? state.garageCat : (t?.category_id || '');
+
   let html = `
     <label>Название</label><input id="f_name" value="${esc(t?.name || '')}">
     <label>Инвентарный номер</label><input id="f_number" value="${esc(t?.number || '')}">
     <label>Категория</label>
     <select id="f_category">
       <option value="">— Без категории —</option>
-      ${state.categories.map(c => `<option value="${c.id}" ${t?.category_id===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}
+      ${state.categories.map(c => `<option value="${c.id}" ${presetCat===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}
     </select>
-    <button class="btn secondary small" id="addCatBtn" style="margin-top:6px">+ Новая категория</button>
     <label>Статус</label>
     <select id="f_status">
       <option value="free" ${t?.status==='free'||!t?'selected':''}>Свободна</option>
@@ -403,17 +523,6 @@ function openTechForm(t) {
     <button class="btn" id="saveBtn">Сохранить</button></div>`;
   openModal(title, html, () => {
     $('#cancelBtn').onclick = closeModal;
-    $('#addCatBtn').onclick = async () => {
-      const name = prompt('Название категории:');
-      if (!name?.trim()) return;
-      const { data, error } = await sb.from('categories').insert({name: name.trim()}).select().single();
-      if (error) { alert('Ошибка: ' + error.message); return; }
-      await loadAll();
-      const sel = $('#f_category');
-      const opt = document.createElement('option');
-      opt.value = data.id; opt.textContent = data.name; opt.selected = true;
-      sel.appendChild(opt);
-    };
     $('#saveBtn').onclick = async () => {
       const obj = { name: $('#f_name').value.trim(), number: $('#f_number').value.trim(), category_id: $('#f_category').value || null, status: $('#f_status').value, notes: $('#f_notes').value.trim() };
       if (!obj.name || !obj.number) { alert('Заполни название и номер'); return; }
@@ -525,8 +634,6 @@ function openPartForm(p) {
   const isNew = !p;
   const title = isNew ? 'Новая запчасть' : 'Запчасть: ' + p.name;
   const pCats = p?.category_ids || [];
-  const links = isNew ? [] : state.links.filter(l => l.part_id === p.id);
-  const partOrders = isNew ? [] : state.orders.filter(o => o.part_id === p.id);
 
   let html = `
     <label>Название</label><input id="p_name" value="${esc(p?.name || '')}">
@@ -799,19 +906,15 @@ function openPickupDialog(partId) {
       const notes = $('#pk_notes').value.trim();
       const nowIso = new Date().toISOString();
 
-      // Закрываем заказы по одному, начиная с самых старых
       let remaining = qty;
       const sortedOrders = activeOrders.slice().sort((a,b) => new Date(a.ordered_at) - new Date(b.ordered_at));
       for (const o of sortedOrders) {
         if (remaining <= 0) break;
         if (o.qty <= remaining) {
-          // закрываем полностью
           await sb.from('orders').update({ status: 'bought', bought_at: nowIso, price, total: o.qty * price, notes: notes || o.notes }).eq('id', o.id);
           remaining -= o.qty;
         } else {
-          // закрываем частично: уменьшаем qty и total, создаём вторую запись "bought" на остаток
           await sb.from('orders').update({ status: 'bought', bought_at: nowIso, price, total: remaining * price, notes: notes || o.notes, qty: remaining }).eq('id', o.id);
-          // остаток по этому заказу — создаём новый "ordered" на (o.qty - remaining)
           await sb.from('orders').insert({
             part_id: p.id, part_name: p.name,
             shop_label: o.shop_label, shop_url: o.shop_url,
@@ -823,7 +926,6 @@ function openPickupDialog(partId) {
         }
       }
 
-      // Обновляем запчасть
       await sb.from('parts').update({
         in_stock: (p.in_stock||0) + qty,
         ordered: Math.max(0, (p.ordered||0) - qty)
@@ -864,14 +966,26 @@ $('#loginBtn').onclick = tryLogin;
 $('#passwordInput').onkeydown = e => { if (e.key === 'Enter') tryLogin(); };
 $('#loginInput').onkeydown   = e => { if (e.key === 'Enter') $('#passwordInput').focus(); };
 $('#logoutBtn').onclick = () => { if (confirm('Выйти?')) logout(); };
+
+$('#backBtn').onclick = () => {
+  state.garageCat = null;
+  state.search = '';
+  render();
+};
+
 $('#addBtn').onclick = () => {
-  if (state.view === 'garage') addTech();
+  if (state.view === 'garage') {
+    if (!state.garageCat) openCategoryForm(null);       // на главном — создаём категорию
+    else addTech();                                     // внутри категории — технику
+  }
   else if (state.view === 'warehouse' && state.whTab === 'parts') addPart();
 };
+
 $$('nav button').forEach(b => b.onclick = () => {
   state.view = b.dataset.view;
   state.search = '';
   state.catFilter = null;
+  state.garageCat = null;
   render();
 });
 
