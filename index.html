@@ -50,7 +50,6 @@
   .status.free { background: #dcfce7; color: #166534; }
   .status.repair { background: #fef3c7; color: #92400e; }
   .status.written_off { background: #fee2e2; color: #991b1b; }
-  .status.cancelled { background: #f3f4f6; color: #6b7280; text-decoration: line-through; }
 
   .tag {
     display: inline-block; background: #eef2ff; color: #3730a3;
@@ -150,9 +149,6 @@
   .qty-row input { flex: 1; }
   .qty-row .btn { padding: 8px 14px; font-size: 18px; line-height: 1; }
 
-  .actions-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
-  .actions-row .btn { flex: 1; min-width: 90px; font-size: 13px; padding: 8px 10px; }
-
   .inst-item {
     padding: 8px 10px; border-bottom: 1px solid #eef0f2; font-size: 13px;
     display: flex; justify-content: space-between; align-items: center; gap: 8px;
@@ -204,9 +200,7 @@
   </nav>
 </div>
 
-<div id="modalRoot"></div>
-
-<script type="module">
+<div id="modalRoot"></div><script type="module">
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const SUPABASE_URL = 'https://mieypqtkrsbtujbtlgey.supabase.co';
@@ -223,13 +217,12 @@ const state = {
   installations: [],
   logs: [],
   search: '',
-  catFilter: null      // id категории или null (все)
+  catFilter: null
 };
 
 const $  = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
 
-// ---------- утилиты ----------
 async function sha256(t) {
   const b = new TextEncoder().encode(t);
   const h = await crypto.subtle.digest('SHA-256', b);
@@ -243,7 +236,6 @@ function fmtDate(iso) {
   return new Date(iso).toLocaleString('ru-RU', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
 }
 
-// ---------- лог ----------
 async function addLog(action, description, entity_type = null, entity_id = null) {
   if (!state.employee) return;
   await sb.from('logs').insert({
@@ -253,7 +245,6 @@ async function addLog(action, description, entity_type = null, entity_id = null)
   });
 }
 
-// ---------- вход ----------
 async function tryLogin() {
   const login = $('#loginInput').value.trim().toLowerCase();
   const pass  = $('#passwordInput').value;
@@ -283,7 +274,6 @@ function logout() {
   $('#passwordInput').value = '';
 }
 
-// ---------- загрузка ----------
 async function loadAll() {
   const [techs, parts, cats, links, insts, logs] = await Promise.all([
     sb.from('techs').select('*').order('created_at', {ascending:false}),
@@ -301,7 +291,6 @@ async function loadAll() {
   state.logs = logs.data || [];
 }
 
-// ---------- рендер ----------
 function render() {
   const titles = {garage:'Гараж', warehouse:'Склад', logs:'Логи'};
   $('#pageTitle').textContent = titles[state.view];
@@ -315,7 +304,6 @@ function render() {
   else if (state.view === 'logs') renderLogs();
 }
 
-// ============ ГАРАЖ ============
 function renderGarage() {
   const q = state.search.toLowerCase();
   const list = state.techs.filter(t =>
@@ -353,7 +341,6 @@ function renderGarage() {
   $$('[data-tech]').forEach(el => el.onclick = () => openTechModal(el.dataset.tech));
 }
 
-// ============ СКЛАД ============
 function renderWarehouse() {
   const q = state.search.toLowerCase();
 
@@ -367,7 +354,7 @@ function renderWarehouse() {
   let list = state.parts.filter(p => {
     if (q && !p.name.toLowerCase().includes(q)) return false;
     if (state.catFilter === null) return true;
-    if (!p.category_ids || !p.category_ids.length) return true; // универсальные
+    if (!p.category_ids || !p.category_ids.length) return true;
     return p.category_ids.includes(state.catFilter);
   });
 
@@ -411,7 +398,6 @@ function renderWarehouse() {
   $$('[data-part]').forEach(el => el.onclick = () => openPartModal(el.dataset.part));
 }
 
-// ============ ЛОГИ ============
 function renderLogs() {
   if (!state.logs.length) { $('#content').innerHTML = `<div class="empty">Пока нет записей.</div>`; return; }
   let html = '';
@@ -424,7 +410,6 @@ function renderLogs() {
   $('#content').innerHTML = html;
 }
 
-// ============ МОДАЛКА ============
 function openModal(title, html, onMount) {
   const root = $('#modalRoot');
   root.innerHTML = `<div class="modal-bg"><div class="modal">
@@ -436,7 +421,6 @@ function openModal(title, html, onMount) {
 }
 function closeModal() { $('#modalRoot').innerHTML = ''; }
 
-// ============ КАТЕГОРИИ ============
 async function addCategoryPrompt() {
   const name = prompt('Название категории:');
   if (!name?.trim()) return;
@@ -447,20 +431,10 @@ async function addCategoryPrompt() {
   render();
 }
 
-// ============ ТЕХНИКА ============
-function addTech() {
-  openTechForm(null);
-}
-
-function openTechModal(id) {
-  openTechForm(state.techs.find(t => t.id === id));
-}
-
-function openTechForm(t) {
+function addTech() { openTechForm(null); }
+function openTechModal(id) { openTechForm(state.techs.find(t => t.id === id)); }function openTechForm(t) {
   const isNew = !t;
   const title = isNew ? 'Новая техника' : 'Техника: ' + t.name;
-
-  // установленные запчасти
   const insts = isNew ? [] : state.installations.filter(i => i.tech_id === t.id);
 
   let html = `
@@ -533,9 +507,7 @@ function openTechForm(t) {
         if (error) { alert('Ошибка: ' + error.message); return; }
         await addLog('edit_tech', `Изменил технику: ${obj.name} (№${obj.number})`, 'tech', t.id);
       }
-      await loadAll();
-      render();
-      closeModal();
+      await loadAll(); render(); closeModal();
     };
 
     if (!isNew) {
@@ -578,7 +550,6 @@ function renderInstList(techId) {
       if (!inst) return;
       if (!confirm(`Отменить установку «${inst.part_name}»? Запчасть вернётся на склад (+${inst.qty}).`)) return;
 
-      // вернуть на склад
       const p = state.parts.find(x => x.id === inst.part_id);
       if (p) {
         await sb.from('parts').update({in_stock: (p.in_stock||0) + inst.qty}).eq('id', p.id);
@@ -596,11 +567,10 @@ function renderInstList(techId) {
 }
 
 function openInstallPicker(tech) {
-  // фильтруем запчасти: подходят по категории (или универсальные) + в наличии > 0
   const list = state.parts.filter(p => {
     if ((p.in_stock||0) <= 0) return false;
-    if (!p.category_ids || !p.category_ids.length) return true; // универсальная
-    if (!tech.category_id) return false; // у техники нет категории — только универсальные
+    if (!p.category_ids || !p.category_ids.length) return true;
+    if (!tech.category_id) return false;
     return p.category_ids.includes(tech.category_id);
   });
 
@@ -650,7 +620,6 @@ function openInstallPicker(tech) {
 
         await loadAll();
         closeModal();
-        // переоткрыть модалку техники, чтобы обновить список
         openTechModal(tech.id);
         render();
       };
@@ -658,4 +627,11 @@ function openInstallPicker(tech) {
   });
 }
 
-// =========
+function addPart() { openPartForm(null); }
+function openPartModal(id) { openPartForm(state.parts.find(p => p.id === id)); }
+
+function openPartForm(p) {
+  const isNew = !p;
+  const title = isNew ? 'Новая запчасть' : 'Запчасть: ' + p.name;
+  const pCats = p?.category_ids || [];
+  const links = isNew ? [] : state.links.filter(l => l.part_id
