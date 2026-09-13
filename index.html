@@ -23,10 +23,14 @@
   .card { background: #fff; border-radius: 10px; padding: 14px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06); cursor: pointer; }
   .card h3 { margin: 0 0 4px; font-size: 16px; }
   .card .sub { color: #666; font-size: 13px; }
-  .card .status { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; margin-top: 6px; }
-  .status.free { background: #dcfce7; color: #166534; }
-  .status.repair { background: #fef3c7; color: #92400e; }
-  .status.written_off { background: #fee2e2; color: #991b1b; }
+  .card .status-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; }
+  .dot.green { background: #16a34a; box-shadow: 0 0 6px rgba(22,163,74,.4); }
+  .dot.red { background: #dc2626; box-shadow: 0 0 6px rgba(220,38,38,.4); }
+  .dot.gray { background: #9ca3af; }
+  .status-text { font-size: 12px; color: #555; }
+  .tech-name-row { display: flex; align-items: center; gap: 8px; }
+  .tech-name-row h3 { margin: 0; }
   .cat-card { display: flex; align-items: center; justify-content: space-between; }
   .cat-card .count { color: #888; font-size: 13px; }
   .tag { display: inline-block; background: #eef2ff; color: #3730a3; font-size: 11px; padding: 2px 8px; border-radius: 6px; margin: 2px 4px 2px 0; }
@@ -71,8 +75,9 @@
   .qty-row .btn { padding: 8px 14px; font-size: 18px; line-height: 1; }
   .inst-item { padding: 8px 10px; border-bottom: 1px solid #eef0f2; font-size: 13px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .inst-item:last-child { border-bottom: none; }
-  .inst-item.cancelled { opacity: .5; }
   .inst-item .info { flex: 1; }
+  .inst-item .del-x { background: #fee2e2; color: #dc2626; border: none; width: 30px; height: 30px; border-radius: 6px; cursor: pointer; font-size: 18px; line-height: 1; font-weight: 700; }
+  .inst-item .del-x:active { opacity: .7; }
   .link-item { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
   .link-item a { flex: 1; color: #2563eb; text-decoration: none; font-size: 14px; padding: 8px 10px; background: #f3f4f6; border-radius: 6px; display: flex; justify-content: space-between; }
   .link-item a:active { background: #e5e7eb; }
@@ -92,11 +97,13 @@
   .radio-row { display: flex; gap: 8px; margin-bottom: 6px; }
   .radio-opt { flex: 1; padding: 10px; text-align: center; border: 2px solid #d1d5db; border-radius: 8px; cursor: pointer; font-size: 13px; background: #fff; }
   .radio-opt.active { border-color: #2563eb; background: #eff6ff; color: #2563eb; font-weight: 600; }
-  .fixed-cat {
-    padding: 10px 12px; background: #f3f4f6; border-radius: 8px;
-    font-size: 13px; color: #555; margin-top: 4px;
-  }
+  .fixed-cat { padding: 10px 12px; background: #f3f4f6; border-radius: 8px; font-size: 13px; color: #555; margin-top: 4px; }
   .fixed-cat strong { color: #1a1a1a; }
+  .cat-view { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: #f3f4f6; border-radius: 8px; margin-top: 4px; font-size: 13px; }
+  .cat-view .val { color: #1a1a1a; flex: 1; }
+  .status-picker { display: flex; gap: 8px; margin-top: 6px; }
+  .status-opt { flex: 1; padding: 12px; text-align: center; border: 2px solid #d1d5db; border-radius: 8px; cursor: pointer; font-size: 14px; background: #fff; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .status-opt.active { border-color: #2563eb; background: #eff6ff; }
 </style>
 </head>
 <body>
@@ -273,9 +280,17 @@ function renderGarageTechs() {
     html += `<div class="empty">Пока нет техники.<br>Нажми «+» чтобы добавить.</div>`;
   } else {
     for (const t of list) {
-      const st = {free:'Свободна', repair:'В ремонте', written_off:'Списана'}[t.status] || t.status;
-      const instCount = state.installations.filter(i => i.tech_id === t.id && !i.cancelled_at).length;
-      html += `<div class="card" data-tech="${t.id}"><h3>${esc(t.name)}</h3><div class="sub">№ ${esc(t.number || '—')}${instCount ? ' · 🔧 ' + instCount : ''}</div><span class="status ${t.status}">${st}</span></div>`;
+      const isRepair = t.status === 'repair';
+      const dot = isRepair ? 'red' : 'green';
+      const label = isRepair ? 'В ремонте' : 'На ходу';
+      const instCount = state.installations.filter(i => i.tech_id === t.id).length;
+      html += `<div class="card" data-tech="${t.id}">
+        <div class="tech-name-row">
+          <span class="dot ${dot}"></span>
+          <h3>${esc(t.name)}</h3>
+        </div>
+        <div class="sub">№ ${esc(t.number || '—')}${instCount ? ' · 🔧 ' + instCount : ''}</div>
+      </div>`;
     }
   }
   $('#content').innerHTML = html;
@@ -486,6 +501,7 @@ function openTechForm(t) {
   const isNew = !t;
   const title = isNew ? 'Новая техника' : 'Техника: ' + t.name;
   const presetCat = isNew && state.garageCat && state.garageCat !== '__none__' ? state.garageCat : (t?.category_id || '');
+  const status = t?.status || 'free';
 
   let html = `
     <label>Название</label><input id="f_name" value="${esc(t?.name || '')}">
@@ -496,16 +512,15 @@ function openTechForm(t) {
       ${state.categories.map(c => `<option value="${c.id}" ${presetCat===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}
     </select>
     <label>Статус</label>
-    <select id="f_status">
-      <option value="free" ${t?.status==='free'||!t?'selected':''}>Свободна</option>
-      <option value="repair" ${t?.status==='repair'?'selected':''}>В ремонте</option>
-      <option value="written_off" ${t?.status==='written_off'?'selected':''}>Списана</option>
-    </select>
+    <div class="status-picker">
+      <div class="status-opt ${status==='free'?'active':''}" data-st="free"><span class="dot green"></span> На ходу</div>
+      <div class="status-opt ${status==='repair'?'active':''}" data-st="repair"><span class="dot red"></span> В ремонте</div>
+    </div>
     <label>Заметки</label><textarea id="f_notes">${esc(t?.notes || '')}</textarea>`;
   if (!isNew) {
     html += `<div style="margin-top:18px;border-top:1px solid #e5e7eb;padding-top:14px">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
-        <strong>Установленные запчасти</strong>
+        <strong>История</strong>
         <div style="display:flex;gap:6px">
           <button class="btn small" id="installBtn">+ Установить</button>
           <button class="btn small secondary" id="orderPartBtn">+ Заказать запчасть</button>
@@ -518,9 +533,15 @@ function openTechForm(t) {
     <button class="btn secondary" id="cancelBtn">Отмена</button>
     <button class="btn" id="saveBtn">Сохранить</button></div>`;
   openModal(title, html, () => {
+    let curStatus = status;
+    $$('.status-opt').forEach(el => el.onclick = () => {
+      curStatus = el.dataset.st;
+      $$('.status-opt').forEach(x => x.classList.toggle('active', x === el));
+    });
+
     $('#cancelBtn').onclick = closeModal;
     $('#saveBtn').onclick = async () => {
-      const obj = { name: $('#f_name').value.trim(), number: $('#f_number').value.trim(), category_id: $('#f_category').value || null, status: $('#f_status').value, notes: $('#f_notes').value.trim() };
+      const obj = { name: $('#f_name').value.trim(), number: $('#f_number').value.trim(), category_id: $('#f_category').value || null, status: curStatus, notes: $('#f_notes').value.trim() };
       if (!obj.name || !obj.number) { alert('Заполни название и номер'); return; }
       if (isNew) {
         const { data, error } = await sb.from('techs').insert(obj).select().single();
@@ -553,23 +574,28 @@ function renderInstList(techId) {
   if (!box) return;
   const list = state.installations.filter(i => i.tech_id === techId);
   if (!list.length) { box.innerHTML = `<div class="sub" style="color:#999">Пока ничего не установлено</div>`; return; }
-  box.innerHTML = list.map(i => `<div class="inst-item ${i.cancelled_at ? 'cancelled' : ''}">
-    <div class="info"><strong>${esc(i.part_name)}</strong> · ${i.qty} шт
-      <div class="sub" style="font-size:12px;color:#888">${fmtDate(i.installed_at)} · ${esc(i.employee_name)}
-      ${i.cancelled_at ? `<br>Отменено: ${esc(i.cancelled_by)}, ${fmtDate(i.cancelled_at)}` : ''}</div>
+  box.innerHTML = list.map(i => `<div class="inst-item">
+    <div class="info">
+      <strong>${esc(i.part_name)}</strong> · ${i.qty} шт
+      <div class="sub" style="font-size:12px;color:#888">${fmtDate(i.installed_at)} · ${esc(i.employee_name)}</div>
     </div>
-    ${!i.cancelled_at ? `<button class="btn small secondary" data-cancel-inst="${i.id}">Отменить</button>` : ''}
+    <button class="del-x" data-del-inst="${i.id}" title="Удалить и вернуть на склад">×</button>
   </div>`).join('');
-  box.querySelectorAll('[data-cancel-inst]').forEach(btn => {
+  box.querySelectorAll('[data-del-inst]').forEach(btn => {
     btn.onclick = async () => {
-      const id = btn.dataset.cancelInst;
+      const id = btn.dataset.delInst;
       const inst = state.installations.find(x => x.id === id);
       if (!inst) return;
-      if (!confirm(`Отменить установку «${inst.part_name}»? Запчасть вернётся на склад (+${inst.qty}).`)) return;
+      if (!confirm(`Удалить запись и вернуть «${inst.part_name}» (${inst.qty} шт) на склад?`)) return;
+
+      // возвращаем на склад
       const p = state.parts.find(x => x.id === inst.part_id);
-      if (p) { await sb.from('parts').update({in_stock: (p.in_stock||0) + inst.qty}).eq('id', p.id); }
-      await sb.from('installations').update({ cancelled_at: new Date().toISOString(), cancelled_by: state.emp.name }).eq('id', id);
-      await addLog('cancel_install', `Отменил установку «${inst.part_name}» с техники №${state.techs.find(t=>t.id===techId)?.number || ''}`, 'tech', techId);
+      if (p) {
+        await sb.from('parts').update({in_stock: (p.in_stock||0) + inst.qty}).eq('id', p.id);
+      }
+      // удаляем запись
+      await sb.from('installations').delete().eq('id', id);
+      await addLog('del_install', `Удалил из истории «${inst.part_name}» (${inst.qty} шт) с техники №${state.techs.find(t=>t.id===techId)?.number || ''}, вернул на склад`, 'tech', techId);
       await loadAll();
       renderInstList(techId);
     };
@@ -797,21 +823,23 @@ function openPartForm(p) {
     <div id="linksBox"></div>
     ${!isNew ? `<button class="btn secondary small" id="addLinkBtn" style="margin-top:4px">+ Добавить ссылку</button>` : '<div class="sub" style="color:#999;font-size:12px;margin-top:4px">Можно добавить после сохранения</div>'}`;
 
-  // Показываем блок категорий ТОЛЬКО при редактировании
-  if (!isNew) {
-    html += `<label>Для какой техники (если ничего — универсальная)</label>
-      <div class="cat-list" id="catList">
-        ${state.categories.map(c => `<div class="cat-item"><label class="cat-label"><input type="checkbox" value="${c.id}" ${pCats.includes(c.id)?'checked':''}><span>${esc(c.name)}</span></label><button class="btn small danger" data-delcat="${c.id}" style="padding:2px 8px;font-size:12px">×</button></div>`).join('') || '<div style="color:#999;padding:6px">Категорий пока нет</div>'}
-      </div>
-      <button class="btn secondary small" id="addCatBtn" style="margin-top:6px">+ Новая категория</button>`;
-  } else if (fixedCat) {
-    // При создании внутри категории — просто показываем, куда попадёт
-    html += `<label>Категория</label>
-      <div class="fixed-cat">Запчасть будет привязана к: <strong>${esc(fixedCat.name)}</strong></div>`;
+  if (isNew) {
+    if (fixedCat) {
+      html += `<label>Категория</label>
+        <div class="fixed-cat">Запчасть будет привязана к: <strong>${esc(fixedCat.name)}</strong></div>`;
+    } else {
+      html += `<label>Категория</label>
+        <div class="fixed-cat">Без категории (универсальная) — можно изменить после сохранения</div>`;
+    }
   } else {
-    // При создании вне категории (из главного склада или универсальных)
+    // При редактировании — компактный вид + кнопка Изменить
+    const catNames = pCats.map(id => state.categories.find(c => c.id === id)?.name).filter(Boolean);
+    const catText = catNames.length ? catNames.join(', ') : 'Универсальная (без категории)';
     html += `<label>Категория</label>
-      <div class="fixed-cat">Без категории (универсальная) — можно изменить после сохранения</div>`;
+      <div class="cat-view">
+        <span class="val">${esc(catText)}</span>
+        <button class="btn small secondary" id="changeCatBtn">Изменить</button>
+      </div>`;
   }
 
   if (!isNew) {
@@ -832,33 +860,9 @@ function openPartForm(p) {
   openModal(title, html, () => {
     $('#cancelBtn').onclick = closeModal;
 
-    const renderCatList = (checked) => {
-      const box = $('#catList');
-      if (!box) return;
-      box.innerHTML = state.categories.map(c => `<div class="cat-item"><label class="cat-label"><input type="checkbox" value="${c.id}" ${checked.includes(c.id)?'checked':''}><span>${esc(c.name)}</span></label><button class="btn small danger" data-delcat="${c.id}" style="padding:2px 8px;font-size:12px">×</button></div>`).join('') || '<div style="color:#999;padding:6px">Категорий пока нет</div>';
-      bindCatDel();
-    };
-
-    const bindCatDel = () => {
-      $$('[data-delcat]').forEach(b => b.onclick = async (e) => {
-        e.preventDefault(); e.stopPropagation();
-        await deleteCategory(b.dataset.delcat);
-        const checked = [...$('#catList').querySelectorAll('input:checked')].map(x => x.value);
-        renderCatList(checked);
-      });
-    };
-    bindCatDel();
-
-    const addCatBtn = $('#addCatBtn');
-    if (addCatBtn) addCatBtn.onclick = async () => {
-      const name = prompt('Название категории:');
-      if (!name?.trim()) return;
-      const checked = [...$('#catList').querySelectorAll('input:checked')].map(x => x.value);
-      const { data, error } = await sb.from('categories').insert({name: name.trim()}).select().single();
-      if (error) { alert('Ошибка: ' + error.message); return; }
-      await loadAll();
-      renderCatList([...checked, data.id]);
-    };
+    // Кнопка "Изменить" — открывает отдельную модалку со списком
+    const changeBtn = $('#changeCatBtn');
+    if (changeBtn) changeBtn.onclick = () => openCategoryPickerForPart(p.id);
 
     if (!isNew) {
       renderLinks(p.id);
@@ -881,21 +885,16 @@ function openPartForm(p) {
     }
 
     $('#saveBtn').onclick = async () => {
-      let checked;
-      if (isNew) {
-        // При создании — категория берётся из preset или пустая
-        checked = presetCat ? [presetCat] : [];
-      } else {
-        checked = [...$('#catList').querySelectorAll('input:checked')].map(x => x.value);
-      }
       const obj = {
         name: $('#p_name').value.trim(),
         in_stock: Math.max(0, parseInt($('#p_stock').value) || 0),
         price_unit: Math.max(0, parseInt($('#p_price').value) || 0),
         ordered: Math.max(0, parseInt($('#p_ordered').value) || 0),
-        notes: $('#p_notes').value.trim(),
-        category_ids: checked
+        notes: $('#p_notes').value.trim()
       };
+      if (isNew) {
+        obj.category_ids = presetCat ? [presetCat] : [];
+      }
       if (!obj.name) { alert('Введи название'); return; }
       if (isNew) {
         const { data, error } = await sb.from('parts').insert(obj).select().single();
@@ -915,8 +914,8 @@ function openPartForm(p) {
 
     if (!isNew) {
       $('#delBtn').onclick = async () => {
-        const active = state.installations.filter(i => i.part_id === p.id && !i.cancelled_at);
-        if (active.length) { alert(`Нельзя удалить: запчасть установлена на ${active.length} технике. Сначала отмени установки.`); return; }
+        const active = state.installations.filter(i => i.part_id === p.id);
+        if (active.length) { alert(`Нельзя удалить: запчасть установлена на ${active.length} технике. Сначала уберите из истории.`); return; }
         if (!confirm('Удалить запчасть со склада?')) return;
         const { error } = await sb.from('parts').delete().eq('id', p.id);
         if (error) { alert('Ошибка: ' + error.message); return; }
@@ -924,6 +923,44 @@ function openPartForm(p) {
         await loadAll(); render(); closeModal();
       };
     }
+  });
+}
+
+// Отдельная модалка для смены категорий запчасти
+function openCategoryPickerForPart(partId) {
+  const part = state.parts.find(p => p.id === partId);
+  if (!part) return;
+  const current = part.category_ids || [];
+
+  let html = `<div class="cat-list" id="catPickList">
+    ${state.categories.map(c => `
+      <label class="cat-item" style="cursor:pointer">
+        <span class="cat-label">
+          <input type="checkbox" value="${c.id}" ${current.includes(c.id)?'checked':''}>
+          <span>${esc(c.name)}</span>
+        </span>
+      </label>
+    `).join('') || '<div style="color:#999;padding:6px">Категорий пока нет</div>'}
+  </div>
+  <div class="sub" style="color:#888;font-size:12px;margin-top:6px">Если ничего не отметить — запчасть станет универсальной</div>
+  <div class="modal-actions">
+    <button class="btn secondary" id="ccCancel">Отмена</button>
+    <button class="btn" id="ccSave">Сохранить</button>
+  </div>`;
+
+  openModal('Категории запчасти', html, () => {
+    $('#ccCancel').onclick = closeModal;
+    $('#ccSave').onclick = async () => {
+      const checked = [...$('#catPickList').querySelectorAll('input:checked')].map(x => x.value);
+      const { error } = await sb.from('parts').update({category_ids: checked}).eq('id', partId);
+      if (error) { alert('Ошибка: ' + error.message); return; }
+      const names = checked.map(id => state.categories.find(c => c.id === id)?.name).filter(Boolean);
+      await addLog('edit_part_cats', `Изменил категории запчасти «${part.name}»: ${names.length ? names.join(', ') : 'универсальная'}`, 'part', partId);
+      await loadAll();
+      closeModal();
+      openPartModal(partId);
+      render();
+    };
   });
 }
 
