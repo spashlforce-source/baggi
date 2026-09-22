@@ -27,13 +27,10 @@
   .dot.green { background: #16a34a; box-shadow: 0 0 6px rgba(22,163,74,.4); }
   .dot.red { background: #dc2626; box-shadow: 0 0 6px rgba(220,38,38,.4); }
   .dot.blue { background: #2563eb; box-shadow: 0 0 6px rgba(37,99,235,.4); }
-  .dot.gray { background: #9ca3af; }
   .tech-name-row { display: flex; align-items: center; gap: 8px; }
   .tech-name-row h3 { margin: 0; }
   .cat-card { display: flex; align-items: center; justify-content: space-between; }
   .cat-card .count { color: #888; font-size: 13px; }
-  .tag { display: inline-block; background: #eef2ff; color: #3730a3; font-size: 11px; padding: 2px 8px; border-radius: 6px; margin: 2px 4px 2px 0; }
-  .tag.universal { background: #f0fdf4; color: #166534; }
   .num-badge { display: inline-block; background: #1e2a3a; color: #fff; font-size: 12px; padding: 3px 9px; border-radius: 6px; margin-right: 6px; font-weight: 600; }
   .num-badge.zero { background: #d1d5db; color: #6b7280; }
   .num-badge.ordered { background: #f59e0b; }
@@ -51,6 +48,7 @@
   .login-box .btn { width: 100%; margin-top: 6px; padding: 12px; }
   .err { color: #dc2626; font-size: 13px; margin-top: 8px; text-align: center; min-height: 18px; }
   .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 100; }
+  .modal-bg.nested { background: rgba(0,0,0,.4); z-index: 200; }
   .modal { background: #fff; border-radius: 12px; padding: 20px; width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; }
   .modal h3 { margin: 0 0 14px; }
   .modal label { display: block; font-size: 13px; color: #555; margin: 10px 0 4px; }
@@ -75,11 +73,8 @@
   .inst-item { padding: 10px 12px; border-bottom: 1px solid #eef0f2; font-size: 13px; }
   .inst-item:last-child { border-bottom: none; }
   .inst-item .info { flex: 1; }
-  .inst-item .del-x { background: #fee2e2; color: #dc2626; border: none; width: 30px; height: 30px; border-radius: 6px; cursor: pointer; font-size: 18px; line-height: 1; font-weight: 700; }
-  .inst-item .del-x:active { opacity: .7; }
   .link-item { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
   .link-item a { flex: 1; color: #2563eb; text-decoration: none; font-size: 14px; padding: 8px 10px; background: #f3f4f6; border-radius: 6px; display: flex; justify-content: space-between; }
-  .link-item a:active { background: #e5e7eb; }
   .tabs-top { display: flex; gap: 8px; margin-bottom: 12px; background: #fff; padding: 4px; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
   .tab-top { flex: 1; padding: 10px; text-align: center; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; color: #666; }
   .tab-top.active { background: #2563eb; color: #fff; }
@@ -152,6 +147,7 @@
 </div>
 
 <div id="modalRoot"></div>
+<div id="modalRoot2"></div>
 
 <script type="module">
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -225,7 +221,6 @@ async function loadAll() {
   state.logs = logs.data || [];
 }
 
-// Автоматический статус техники — есть активный ремонт → repair
 function techHasActiveRepair(techId) {
   return state.repairs.some(r => r.tech_id === techId && r.status === 'in_progress');
 }
@@ -442,13 +437,18 @@ function renderLogs() {
   $('#content').innerHTML = html;
 }
 
-function openModal(title, html, onMount) {
-  const root = $('#modalRoot');
-  root.innerHTML = `<div class="modal-bg"><div class="modal"><h3>${esc(title)}</h3><div id="modalBody">${html}</div></div></div>`;
-  $('#modalRoot .modal-bg').onclick = e => { if (e.target.classList.contains('modal-bg')) closeModal(); };
+// ============ МОДАЛКИ (два уровня) ============
+function openModal(title, html, onMount, nested = false) {
+  const root = nested ? $('#modalRoot2') : $('#modalRoot');
+  const cls = nested ? 'modal-bg nested' : 'modal-bg';
+  root.innerHTML = `<div class="${cls}"><div class="modal"><h3>${esc(title)}</h3><div id="modalBody">${html}</div></div></div>`;
+  root.querySelector('.modal-bg').onclick = e => { if (e.target.classList.contains('modal-bg')) closeModal(nested); };
   onMount?.();
 }
-function closeModal() { $('#modalRoot').innerHTML = ''; }
+function closeModal(nested = false) {
+  if (nested) $('#modalRoot2').innerHTML = '';
+  else { $('#modalRoot').innerHTML = ''; $('#modalRoot2').innerHTML = ''; }
+}
 
 // ============ КАТЕГОРИИ ============
 function openCategoryForm(cat) {
@@ -460,7 +460,7 @@ function openCategoryForm(cat) {
     <button class="btn secondary" id="cancelBtn">Отмена</button>
     <button class="btn" id="saveBtn">Сохранить</button></div>`;
   openModal(title, html, () => {
-    $('#cancelBtn').onclick = closeModal;
+    $('#cancelBtn').onclick = () => closeModal();
     $('#saveBtn').onclick = async () => {
       const name = $('#c_name').value.trim();
       if (!name) { alert('Введи название'); return; }
@@ -494,25 +494,6 @@ function openCategoryForm(cat) {
       };
     }
   });
-}
-
-async function deleteCategory(id) {
-  const cat = state.categories.find(c => c.id === id);
-  if (!cat) return;
-  const usedByTechs = state.techs.filter(t => t.category_id === id);
-  const usedByParts = state.parts.filter(p => (p.category_ids || []).includes(id));
-  if (usedByTechs.length || usedByParts.length) {
-    const msgs = [];
-    if (usedByTechs.length) msgs.push(`техники: ${usedByTechs.map(t => t.name).join(', ')}`);
-    if (usedByParts.length) msgs.push(`запчастей: ${usedByParts.map(p => p.name).join(', ')}`);
-    alert('Нельзя удалить категорию — она используется:\n' + msgs.join('\n'));
-    return;
-  }
-  if (!confirm(`Удалить категорию «${cat.name}»?`)) return;
-  const { error } = await sb.from('categories').delete().eq('id', id);
-  if (error) { alert('Ошибка: ' + error.message); return; }
-  await addLog('del_category', `Удалил категорию: ${cat.name}`, 'category', id);
-  await loadAll(); render();
 }
 
 // ============ ТЕХНИКА ============
@@ -551,7 +532,7 @@ function openTechForm(t) {
     <button class="btn secondary" id="cancelBtn">Отмена</button>
     <button class="btn" id="saveBtn">Сохранить</button></div>`;
   openModal(title, html, () => {
-    $('#cancelBtn').onclick = closeModal;
+    $('#cancelBtn').onclick = () => closeModal();
     $('#saveBtn').onclick = async () => {
       const obj = { name: $('#f_name').value.trim(), category_id: $('#f_category').value || null, notes: $('#f_notes').value.trim() };
       if (!obj.name) { alert('Введи название'); return; }
@@ -642,18 +623,16 @@ function openRepairForm(tech, repair) {
     <button class="btn" id="r_save">Сохранить</button>
   </div>`;
 
+  // временный список запчастей в форме
+  let tempParts = [];
+  if (repair?.id) tempParts = state.repairParts.filter(rp => rp.repair_id === repair.id).map(rp => ({...rp}));
+
   openModal(title, html, () => {
     let st = curStatus;
-    let tempParts = []; // временный список запчастей, пока ремонт не сохранён
-    let savedRepairId = repair?.id || null;
-
-    // Если ремонт уже сохранён — берём его запчасти из БД
-    if (savedRepairId) {
-      tempParts = state.repairParts.filter(rp => rp.repair_id === savedRepairId).map(rp => ({...rp}));
-    }
 
     const renderParts = () => {
       const box = $('#r_parts');
+      if (!box) return;
       if (!tempParts.length) { box.innerHTML = `<div class="sub" style="color:#999;font-size:12px">Пока нет запчастей</div>`; return; }
       box.innerHTML = tempParts.map((p, i) => `<div class="repair-part-item">
         <span>${esc(p.part_name)} × ${p.qty}<span class="t ${p.type}">${p.type === 'installed' ? 'установлено' : 'заказано'}</span></span>
@@ -680,12 +659,11 @@ function openRepairForm(tech, repair) {
       renderParts();
     });
 
-    $('#r_cancel').onclick = closeModal;
+    $('#r_cancel').onclick = () => closeModal();
 
     if (!isNew) {
       $('#r_delBtn').onclick = async () => {
         if (!confirm('Удалить ремонт? Установленные запчасти вернутся на склад.')) return;
-        // вернуть установленные запчасти на склад
         const parts = state.repairParts.filter(rp => rp.repair_id === repair.id && rp.type === 'installed');
         for (const rp of parts) {
           const p = state.parts.find(x => x.id === rp.part_id);
@@ -703,38 +681,24 @@ function openRepairForm(tech, repair) {
       const comment = $('#r_comment').value.trim();
 
       if (isNew) {
-        // создаём ремонт
         const { data: newRepair, error } = await sb.from('repairs').insert({
-          tech_id: tech.id,
-          comment,
-          status: st,
-          employee_id: state.emp.id,
-          employee_name: state.emp.name,
+          tech_id: tech.id, comment, status: st,
+          employee_id: state.emp.id, employee_name: state.emp.name,
           completed_at: st === 'completed' ? new Date().toISOString() : null
         }).select().single();
         if (error) { alert('Ошибка: ' + error.message); return; }
 
-        // добавляем запчасти
         for (const p of tempParts) {
           await sb.from('repair_parts').insert({
-            repair_id: newRepair.id,
-            part_id: p.part_id,
-            part_name: p.part_name,
-            qty: p.qty,
-            type: p.type,
-            order_id: p.order_id || null,
-            employee_id: state.emp.id,
-            employee_name: state.emp.name
+            repair_id: newRepair.id, part_id: p.part_id, part_name: p.part_name,
+            qty: p.qty, type: p.type, order_id: p.order_id || null,
+            employee_id: state.emp.id, employee_name: state.emp.name
           });
         }
-        await addLog('add_repair', `Создал ремонт техники «${tech.name}»${comment ? ': ' + comment.slice(0,60) : ''}`, 'tech', tech.id);
+        await addLog('add_repair', `Создал ремонт техники «${tech.name}»`, 'tech', tech.id);
       } else {
-        // обновляем
         const oldParts = state.repairParts.filter(rp => rp.repair_id === repair.id);
-        const oldIds = oldParts.map(x => x.id);
         const newIds = tempParts.filter(x => x.id).map(x => x.id);
-
-        // что удалили — вернуть на склад если installed
         for (const op of oldParts) {
           if (!newIds.includes(op.id)) {
             if (op.type === 'installed') {
@@ -744,26 +708,18 @@ function openRepairForm(tech, repair) {
             await sb.from('repair_parts').delete().eq('id', op.id);
           }
         }
-        // обновляем сам ремонт
         const { error } = await sb.from('repairs').update({
-          comment,
-          status: st,
+          comment, status: st,
           completed_at: st === 'completed' ? new Date().toISOString() : null
         }).eq('id', repair.id);
         if (error) { alert('Ошибка: ' + error.message); return; }
 
-        // добавляем новые
         for (const p of tempParts) {
           if (!p.id) {
             await sb.from('repair_parts').insert({
-              repair_id: repair.id,
-              part_id: p.part_id,
-              part_name: p.part_name,
-              qty: p.qty,
-              type: p.type,
-              order_id: p.order_id || null,
-              employee_id: state.emp.id,
-              employee_name: state.emp.name
+              repair_id: repair.id, part_id: p.part_id, part_name: p.part_name,
+              qty: p.qty, type: p.type, order_id: p.order_id || null,
+              employee_id: state.emp.id, employee_name: state.emp.name
             });
           }
         }
@@ -777,7 +733,7 @@ function openRepairForm(tech, repair) {
   });
 }
 
-// Установить запчасть со склада (в ремонт)
+// Установить запчасть со склада — вложенная модалка
 function openRepairAddPart(tech, onAdd) {
   const list = state.parts.filter(p => {
     if ((p.in_stock||0) <= 0) return false;
@@ -805,7 +761,7 @@ function openRepairAddPart(tech, onAdd) {
   </div>`;
 
   openModal('Установить запчасть', html, () => {
-    $('#raCancel').onclick = closeModal;
+    $('#raCancel').onclick = () => closeModal(true);
     if (list.length) {
       $('#raMinus').onclick = () => { const i = $('#ra_qty'); i.value = Math.max(1, (+i.value||1) - 1); };
       $('#raPlus').onclick  = () => { const i = $('#ra_qty'); i.value = (+i.value||1) + 1; };
@@ -815,16 +771,18 @@ function openRepairAddPart(tech, onAdd) {
         const part = state.parts.find(p => p.id === partId);
         if (!part) return;
         if (qty > (part.in_stock||0)) { alert('Недостаточно на складе'); return; }
-        // сразу списываем со склада
+        // списываем со склада сразу
         await sb.from('parts').update({in_stock: (part.in_stock||0) - qty}).eq('id', part.id);
+        // обновляем локальное состояние, чтобы если опять открыть — было актуально
+        part.in_stock = (part.in_stock||0) - qty;
         onAdd({ part_id: part.id, part_name: part.name, qty, type: 'installed' });
-        closeModal();
+        closeModal(true); // закрываем только вложенную
       };
     }
-  });
+  }, true); // nested = true
 }
 
-// Заказать запчасть (в ремонт)
+// Заказать запчасть — вложенная модалка
 function openRepairOrderPart(tech, onAdd) {
   const catName = tech.category_id ? (state.categories.find(c => c.id === tech.category_id)?.name || '') : '';
 
@@ -907,7 +865,7 @@ function openRepairOrderPart(tech, onAdd) {
       $('#roPickList').innerHTML = `<div class="sub" style="color:#999">Нет запчастей</div>`;
     }
 
-    $('#roCancel').onclick = closeModal;
+    $('#roCancel').onclick = () => closeModal(true);
     $('#roDo').onclick = async () => {
       if (mode === 'new') {
         const name = $('#ro_name').value.trim();
@@ -931,7 +889,9 @@ function openRepairOrderPart(tech, onAdd) {
         }).select().single();
         if (e2) { alert('Ошибка заказа: ' + e2.message); return; }
 
-        await addLog('order', `Заказал «${name}» (${qty} шт × ${money(price)}) для ремонта техники «${tech.name}»${shop ? ', ' + shop : ''}`, 'tech', tech.id);
+        await addLog('order', `Заказал «${name}» (${qty} шт × ${money(price)}) для ремонта техники «${tech.name}»`, 'tech', tech.id);
+        // обновляем локально
+        state.parts.push(newPart);
         onAdd({ part_id: newPart.id, part_name: name, qty, type: 'ordered', order_id: order.id });
       } else {
         if (!picked) { alert('Выбери запчасть'); return; }
@@ -949,12 +909,13 @@ function openRepairOrderPart(tech, onAdd) {
         if (error) { alert('Ошибка: ' + error.message); return; }
 
         await sb.from('parts').update({ordered: (picked.ordered||0) + qty, price_unit: price}).eq('id', picked.id);
-        await addLog('order', `Заказал «${picked.name}» (${qty} шт × ${money(price)}) для ремонта техники «${tech.name}»${shop ? ', ' + shop : ''}`, 'tech', tech.id);
+        picked.ordered = (picked.ordered||0) + qty;
+        await addLog('order', `Заказал «${picked.name}» (${qty} шт × ${money(price)}) для ремонта техники «${tech.name}»`, 'tech', tech.id);
         onAdd({ part_id: picked.id, part_name: picked.name, qty, type: 'ordered', order_id: order.id });
       }
-      closeModal();
+      closeModal(true);
     };
-  });
+  }, true); // nested = true
 }
 
 // ============ ЗАПЧАСТЬ ============
@@ -1011,7 +972,7 @@ function openPartForm(p) {
     <button class="btn" id="saveBtn">Сохранить</button></div>`;
 
   openModal(title, html, () => {
-    $('#cancelBtn').onclick = closeModal;
+    $('#cancelBtn').onclick = () => closeModal();
     const changeBtn = $('#changeCatBtn');
     if (changeBtn) changeBtn.onclick = () => openCategoryPickerForPart(p.id);
 
@@ -1082,15 +1043,15 @@ function openCategoryPickerForPart(partId) {
     <button class="btn" id="ccSave">Сохранить</button>
   </div>`;
   openModal('Категории запчасти', html, () => {
-    $('#ccCancel').onclick = closeModal;
+    $('#ccCancel').onclick = () => closeModal(true);
     $('#ccSave').onclick = async () => {
       const checked = [...$('#catPickList').querySelectorAll('input:checked')].map(x => x.value);
       const { error } = await sb.from('parts').update({category_ids: checked}).eq('id', partId);
       if (error) { alert('Ошибка: ' + error.message); return; }
       await addLog('edit_part_cats', `Изменил категории запчасти «${part.name}»`, 'part', partId);
-      await loadAll(); closeModal(); openPartModal(partId); render();
+      await loadAll(); closeModal(true); closeModal(); openPartModal(partId); render();
     };
-  });
+  }, true);
 }
 
 function renderLinks(partId) {
@@ -1138,7 +1099,7 @@ function openOrderForm(p) {
     $('#oMinus').onclick = () => { const i = $('#o_qty'); i.value = Math.max(1, (+i.value||1) - 1); };
     $('#oPlus').onclick  = () => { const i = $('#o_qty'); i.value = (+i.value||1) + 1; };
     if (links.length) $('#o_shop').onchange = e => { $('#manualShop').style.display = e.target.value === '__manual__' ? 'block' : 'none'; };
-    $('#oCancel').onclick = closeModal;
+    $('#oCancel').onclick = () => closeModal(true);
     $('#oConfirm').onclick = async () => {
       let shopLabel = '', shopUrl = '';
       if (links.length) {
@@ -1151,9 +1112,9 @@ function openOrderForm(p) {
       await sb.from('orders').insert({ part_id: p.id, part_name: p.name, shop_label: shopLabel, shop_url: shopUrl, qty, price, total: qty * price, status: 'ordered', employee_id: state.emp.id, employee_name: state.emp.name, notes: $('#o_notes').value.trim() });
       await sb.from('parts').update({ordered: (p.ordered||0) + qty}).eq('id', p.id);
       await addLog('order', `Заказал «${p.name}» (${qty} шт × ${money(price)})${shopLabel ? ', ' + shopLabel : ''}`, 'part', p.id);
-      await loadAll(); closeModal(); openPartModal(p.id); render();
+      await loadAll(); closeModal(true); closeModal(); openPartModal(p.id); render();
     };
-  });
+  }, true);
 }
 
 function openPickupDialog(partId) {
@@ -1169,7 +1130,7 @@ function openPickupDialog(partId) {
   openModal('Забрал: ' + p.name, html, () => {
     $('#pkMinus').onclick = () => { const i = $('#pk_qty'); i.value = Math.max(1, (+i.value||1) - 1); };
     $('#pkPlus').onclick  = () => { const i = $('#pk_qty'); i.value = Math.min(p.ordered, (+i.value||1) + 1); };
-    $('#pkCancel').onclick = closeModal;
+    $('#pkCancel').onclick = () => closeModal();
     $('#pkConfirm').onclick = async () => {
       const qty = Math.max(1, Math.min(p.ordered, parseInt($('#pk_qty').value) || 1));
       const price = Math.max(0, parseInt($('#pk_price').value) || 0);
