@@ -255,7 +255,6 @@ function render() {
   else if (state.view === 'logs') renderLogs();
 }
 
-// ============ ГАРАЖ ============
 function renderGarage() {
   if (!state.garageCat) renderGarageCategories();
   else renderGarageTechs();
@@ -316,7 +315,6 @@ function renderGarageTechs() {
   $$('[data-tech]').forEach(el => el.onclick = () => openTechModal(el.dataset.tech));
 }
 
-// ============ СКЛАД ============
 function renderWarehouse() {
   const tabsHtml = `<div class="tabs-top">
     <div class="tab-top ${state.whTab==='parts'?'active':''}" id="tabParts">📦 Склад</div>
@@ -437,7 +435,6 @@ function renderLogs() {
   $('#content').innerHTML = html;
 }
 
-// ============ МОДАЛКИ (два уровня) ============
 function openModal(title, html, onMount, nested = false) {
   const root = nested ? $('#modalRoot2') : $('#modalRoot');
   const cls = nested ? 'modal-bg nested' : 'modal-bg';
@@ -450,7 +447,6 @@ function closeModal(nested = false) {
   else { $('#modalRoot').innerHTML = ''; $('#modalRoot2').innerHTML = ''; }
 }
 
-// ============ КАТЕГОРИИ ============
 function openCategoryForm(cat) {
   const isNew = !cat;
   const title = isNew ? 'Новая категория' : 'Категория: ' + cat.name;
@@ -496,7 +492,6 @@ function openCategoryForm(cat) {
   });
 }
 
-// ============ ТЕХНИКА ============
 function addTech() { openTechForm(null); }
 function openTechModal(id) { openTechForm(state.techs.find(t => t.id === id)); }
 
@@ -593,7 +588,6 @@ function renderRepairCard(r) {
   </div>`;
 }
 
-// ============ РЕМОНТ (форма) ============
 function openRepairForm(tech, repair) {
   const isNew = !repair;
   const title = isNew ? 'Новый ремонт: ' + tech.name : 'Ремонт: ' + tech.name;
@@ -623,7 +617,6 @@ function openRepairForm(tech, repair) {
     <button class="btn" id="r_save">Сохранить</button>
   </div>`;
 
-  // временный список запчастей в форме
   let tempParts = [];
   if (repair?.id) tempParts = state.repairParts.filter(rp => rp.repair_id === repair.id).map(rp => ({...rp}));
 
@@ -733,7 +726,6 @@ function openRepairForm(tech, repair) {
   });
 }
 
-// Установить запчасть со склада — вложенная модалка
 function openRepairAddPart(tech, onAdd) {
   const list = state.parts.filter(p => {
     if ((p.in_stock||0) <= 0) return false;
@@ -771,18 +763,15 @@ function openRepairAddPart(tech, onAdd) {
         const part = state.parts.find(p => p.id === partId);
         if (!part) return;
         if (qty > (part.in_stock||0)) { alert('Недостаточно на складе'); return; }
-        // списываем со склада сразу
         await sb.from('parts').update({in_stock: (part.in_stock||0) - qty}).eq('id', part.id);
-        // обновляем локальное состояние, чтобы если опять открыть — было актуально
         part.in_stock = (part.in_stock||0) - qty;
         onAdd({ part_id: part.id, part_name: part.name, qty, type: 'installed' });
-        closeModal(true); // закрываем только вложенную
+        closeModal(true);
       };
     }
-  }, true); // nested = true
+  }, true);
 }
 
-// Заказать запчасть — вложенная модалка
 function openRepairOrderPart(tech, onAdd) {
   const catName = tech.category_id ? (state.categories.find(c => c.id === tech.category_id)?.name || '') : '';
 
@@ -890,7 +879,6 @@ function openRepairOrderPart(tech, onAdd) {
         if (e2) { alert('Ошибка заказа: ' + e2.message); return; }
 
         await addLog('order', `Заказал «${name}» (${qty} шт × ${money(price)}) для ремонта техники «${tech.name}»`, 'tech', tech.id);
-        // обновляем локально
         state.parts.push(newPart);
         onAdd({ part_id: newPart.id, part_name: name, qty, type: 'ordered', order_id: order.id });
       } else {
@@ -915,10 +903,9 @@ function openRepairOrderPart(tech, onAdd) {
       }
       closeModal(true);
     };
-  }, true); // nested = true
+  }, true);
 }
 
-// ============ ЗАПЧАСТЬ ============
 function addPart() { openPartForm(null); }
 function openPartModal(id) { openPartForm(state.parts.find(p => p.id === id)); }
 
@@ -1152,11 +1139,11 @@ function openPickupDialog(partId) {
       await sb.from('parts').update({ in_stock: (p.in_stock||0) + qty, ordered: Math.max(0, (p.ordered||0) - qty) }).eq('id', p.id);
       await addLog('pickup', `Забрал «${p.name}» — ${qty} шт, ${money(qty*price)}`, 'part', p.id);
       await loadAll(); render();
+      closeModal();  // ← ФИКС
     };
   });
 }
 
-// ============ СТАРТ ============
 async function startApp() {
   $('#loginScreen').style.display = 'none';
   $('#app').style.display = 'block';
