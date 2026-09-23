@@ -60,4 +60,11 @@ export function techStatus(tech) {
 }
 
 // Записать действие в лог
-import { addLog as _addLog } from './api.js';
+export async function addLog(action, description, entity_type = null, entity_id = null) {
+  if (!state.emp) return;
+  await sb.from('logs').insert({
+    employee_id: state.emp.id,
+    employee_name: state.emp.name,
+    action, description, entity_type, entity_id
+  });
+}
