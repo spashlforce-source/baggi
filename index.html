@@ -51,6 +51,9 @@
   .login-box input { width: 100%; padding: 12px; margin-bottom: 10px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 15px; }
   .login-box .btn { width: 100%; margin-top: 6px; padding: 12px; }
   .err { color: #dc2626; font-size: 13px; margin-top: 8px; text-align: center; min-height: 18px; }
+  .loading-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 16px; color: #666; font-size: 15px; }
+  .spinner { width: 36px; height: 36px; border: 3px solid #e5e7eb; border-top-color: #2563eb; border-radius: 50%; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
   .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 100; }
   .modal-bg.nested { background: rgba(0,0,0,.4); z-index: 200; }
   .modal { background: #fff; border-radius: 12px; padding: 20px; width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; }
@@ -116,28 +119,20 @@
   .repair-part-item .t { font-size: 11px; padding: 1px 6px; border-radius: 4px; margin-left: 6px; }
   .repair-part-item .t.installed { background: #dcfce7; color: #166534; }
   .repair-part-item .t.ordered { background: #fef3c7; color: #92400e; }
-
-  /* Заголовок секции */
-  .section-title {
-    font-size: 13px; color: #666; font-weight: 600;
-    margin: 16px 0 8px; padding: 0 4px;
-    text-transform: uppercase; letter-spacing: .5px;
-  }
-
-  /* Свёрнутая история */
-  .history-toggle {
-    background: #fff; border-radius: 10px; padding: 12px 14px;
-    margin: 16px 0 8px; cursor: pointer; user-select: none;
-    display: flex; justify-content: space-between; align-items: center;
-    font-weight: 600; font-size: 14px; color: #1e2a3a;
-    box-shadow: 0 1px 3px rgba(0,0,0,.06);
-  }
+  .section-title { font-size: 13px; color: #666; font-weight: 600; margin: 16px 0 8px; padding: 0 4px; text-transform: uppercase; letter-spacing: .5px; }
+  .history-toggle { background: #fff; border-radius: 10px; padding: 12px 14px; margin: 16px 0 8px; cursor: pointer; user-select: none; display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: 14px; color: #1e2a3a; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
   .history-toggle:active { opacity: .8; }
   .history-toggle .arrow { transition: transform .2s; font-size: 12px; color: #888; }
   .history-toggle.open .arrow { transform: rotate(180deg); }
 </style>
 </head>
 <body>
+
+<div id="loadingScreen" class="loading-screen">
+  <div class="spinner"></div>
+  <div>Загрузка приложения...</div>
+  <div id="loadStatus" style="font-size:12px;color:#aaa"></div>
+</div>
 
 <div id="loginScreen" class="login-wrap" style="display:none">
   <div class="login-box">
@@ -173,10 +168,50 @@
 <div id="modalRoot2"></div>
 
 <script type="module">
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+// ============ УМНАЯ ЗАГРУЗКА SUPABASE С НЕСКОЛЬКИХ CDN ============
+const CDN_LIST = [
+  { name: 'jsdelivr', url: 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm' },
+  { name: 'unpkg',    url: 'https://unpkg.com/@supabase/supabase-js@2/dist/main/esm/index.js' },
+  { name: 'esm.sh',   url: 'https://esm.sh/@supabase/supabase-js@2' },
+  { name: 'skypack',  url: 'https://cdn.skypack.dev/@supabase/supabase-js@2' }
+];
+
+async function loadSupabaseCreateClient() {
+  const status = document.getElementById('loadStatus');
+  for (const cdn of CDN_LIST) {
+    try {
+      if (status) status.textContent = 'Пробую ' + cdn.name + '...';
+      const mod = await import(cdn.url);
+      if (mod && mod.createClient) {
+        console.log('✅ Supabase загружен с', cdn.name);
+        if (status) status.textContent = 'OK: ' + cdn.name;
+        return mod.createClient;
+      }
+    } catch (e) {
+      console.warn('❌ CDN не сработал:', cdn.name, e.message);
+    }
+  }
+  throw new Error('Не удалось загрузить Supabase ни с одного CDN');
+}
+
+// ============ ОСНОВНОЙ КОД ============
+let createClient;
+try {
+  createClient = await loadSupabaseCreateClient();
+} catch (e) {
+  document.getElementById('loadingScreen').innerHTML =
+    '<div style="color:#dc2626;text-align:center;padding:20px;max-width:400px">' +
+    '<strong>Не удалось загрузить приложение</strong><br><br>' +
+    'Проблема с доступом к интернет-библиотеке.<br>' +
+    'Попробуй:<br>1. Сменить DNS на 8.8.8.8<br>2. Другой браузер<br>3. Мобильный интернет' +
+    '</div>';
+  throw e;
+}
+
 const SUPABASE_URL = 'https://mieypqtkrsbtujbtlgey.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_gLuUMy49IZEgkFRjk6qMeQ_wt3cMJWG';
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+
 const state = {
   view: 'garage',
   garageCat: null,
@@ -386,7 +421,6 @@ function renderWarehouse() {
     else allParts = state.parts.filter(p => (p.category_ids || []).includes(state.whCat));
     allParts = allParts.filter(p => !q || p.name.toLowerCase().includes(q));
 
-    // Разделение: в наличии (in_stock > 0 ИЛИ ordered > 0) и история (in_stock=0, ordered=0, есть заказы)
     const inStock = allParts.filter(p => (p.in_stock||0) > 0 || (p.ordered||0) > 0);
     const history = allParts.filter(p => {
       if ((p.in_stock||0) > 0 || (p.ordered||0) > 0) return false;
@@ -396,26 +430,20 @@ function renderWarehouse() {
     let html = tabsHtml;
     html += `<input class="search" id="searchInput" placeholder="Поиск запчастей..." value="${esc(state.search)}">`;
 
-    // Секция "В наличии"
     if (!inStock.length) {
       html += `<div class="empty" style="padding:20px">В наличии ничего нет</div>`;
     } else {
       html += `<div class="section-title">📦 В наличии</div>`;
-      for (const p of inStock) {
-        html += renderPartCard(p);
-      }
+      for (const p of inStock) html += renderPartCard(p);
     }
 
-    // Секция "История заказов" (свёрнутая)
     if (history.length) {
       html += `<div class="history-toggle ${state.historyOpen?'open':''}" id="historyToggle">
         <span>📜 История заказов (${history.length})</span>
         <span class="arrow">▼</span>
       </div>`;
       if (state.historyOpen) {
-        for (const p of history) {
-          html += renderPartCard(p, true);
-        }
+        for (const p of history) html += renderPartCard(p, true);
       }
     }
 
@@ -1241,7 +1269,6 @@ function openPickupDialog(partId) {
   });
 }
 
-// ============ ИНСТРУМЕНТЫ ============
 function addTool() { openToolForm(null); }
 
 function openToolForm(t) {
@@ -1307,6 +1334,7 @@ function openToolForm(t) {
 }
 
 async function startApp() {
+  $('#loadingScreen').style.display = 'none';
   $('#loginScreen').style.display = 'none';
   $('#app').style.display = 'block';
   await loadAll();
@@ -1369,6 +1397,7 @@ $$('nav button').forEach(b => b.onclick = () => {
   if (saved) {
     try { state.emp = JSON.parse(saved); await startApp(); return; } catch(e) {}
   }
+  $('#loadingScreen').style.display = 'none';
   $('#loginScreen').style.display = 'flex';
 })();
 </script>
