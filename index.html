@@ -116,6 +116,25 @@
   .repair-part-item .t { font-size: 11px; padding: 1px 6px; border-radius: 4px; margin-left: 6px; }
   .repair-part-item .t.installed { background: #dcfce7; color: #166534; }
   .repair-part-item .t.ordered { background: #fef3c7; color: #92400e; }
+
+  /* Заголовок секции */
+  .section-title {
+    font-size: 13px; color: #666; font-weight: 600;
+    margin: 16px 0 8px; padding: 0 4px;
+    text-transform: uppercase; letter-spacing: .5px;
+  }
+
+  /* Свёрнутая история */
+  .history-toggle {
+    background: #fff; border-radius: 10px; padding: 12px 14px;
+    margin: 16px 0 8px; cursor: pointer; user-select: none;
+    display: flex; justify-content: space-between; align-items: center;
+    font-weight: 600; font-size: 14px; color: #1e2a3a;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  }
+  .history-toggle:active { opacity: .8; }
+  .history-toggle .arrow { transition: transform .2s; font-size: 12px; color: #888; }
+  .history-toggle.open .arrow { transform: rotate(180deg); }
 </style>
 </head>
 <body>
@@ -163,6 +182,7 @@ const state = {
   garageCat: null,
   whCat: null,
   whTab: 'parts',
+  historyOpen: false,
   emp: null,
   techs: [], parts: [], categories: [], links: [], repairs: [], repairParts: [], orders: [], tools: [], logs: [],
   search: '', orderFilter: 'all'
@@ -333,7 +353,6 @@ function renderWarehouse() {
   if (state.whTab === 'orders') { renderOrders(tabsHtml); return; }
   if (state.whTab === 'tools') { renderTools(tabsHtml); return; }
 
-  // Склад (parts)
   if (!state.whCat) {
     const q = state.search.toLowerCase();
     const cats = state.categories.filter(c => !q || c.name.toLowerCase().includes(q));
@@ -359,32 +378,47 @@ function renderWarehouse() {
     $('#tabTools').onclick = () => { state.whTab = 'tools'; render(); };
     const si = $('#searchInput');
     if (si) si.oninput = e => { state.search = e.target.value; const p = e.target.selectionStart; renderWarehouse(); const ni = $('#searchInput'); if (ni) { ni.focus(); ni.setSelectionRange(p, p); } };
-    $$('[data-whcat]').forEach(el => el.onclick = () => { state.whCat = el.dataset.whcat === '__none__' ? '__none__' : el.dataset.whcat; state.search = ''; render(); });
+    $$('[data-whcat]').forEach(el => el.onclick = () => { state.whCat = el.dataset.whcat === '__none__' ? '__none__' : el.dataset.whcat; state.search = ''; state.historyOpen = false; render(); });
   } else {
     const q = state.search.toLowerCase();
-    let list;
-    if (state.whCat === '__none__') list = state.parts.filter(p => !p.category_ids || !p.category_ids.length);
-    else list = state.parts.filter(p => (p.category_ids || []).includes(state.whCat));
-    list = list.filter(p => !q || p.name.toLowerCase().includes(q));
+    let allParts;
+    if (state.whCat === '__none__') allParts = state.parts.filter(p => !p.category_ids || !p.category_ids.length);
+    else allParts = state.parts.filter(p => (p.category_ids || []).includes(state.whCat));
+    allParts = allParts.filter(p => !q || p.name.toLowerCase().includes(q));
+
+    // Разделение: в наличии (in_stock > 0 ИЛИ ordered > 0) и история (in_stock=0, ordered=0, есть заказы)
+    const inStock = allParts.filter(p => (p.in_stock||0) > 0 || (p.ordered||0) > 0);
+    const history = allParts.filter(p => {
+      if ((p.in_stock||0) > 0 || (p.ordered||0) > 0) return false;
+      return state.orders.some(o => o.part_id === p.id);
+    });
 
     let html = tabsHtml;
     html += `<input class="search" id="searchInput" placeholder="Поиск запчастей..." value="${esc(state.search)}">`;
-    if (!list.length) {
-      html += `<div class="empty">Пока нет запчастей.<br>Нажми «+» чтобы добавить.</div>`;
+
+    // Секция "В наличии"
+    if (!inStock.length) {
+      html += `<div class="empty" style="padding:20px">В наличии ничего нет</div>`;
     } else {
-      for (const p of list) {
-        const hasOrdered = (p.ordered||0) > 0;
-        html += `<div class="card" data-part="${p.id}">
-          <h3>${esc(p.name)}</h3>
-          <div style="margin-top:6px">
-            <span class="num-badge ${p.in_stock>0?'':'zero'}">${p.in_stock} шт</span>
-            ${hasOrdered ? `<span class="num-badge ordered">заказано: ${p.ordered}</span>` : ''}
-            ${p.price_unit ? `<span class="num-badge" style="background:#e5e7eb;color:#374151">${money(p.price_unit)}</span>` : ''}
-          </div>
-          ${hasOrdered ? `<div style="margin-top:10px"><button class="btn success small" data-pickup="${p.id}">🟢 Забрал</button></div>` : ''}
-        </div>`;
+      html += `<div class="section-title">📦 В наличии</div>`;
+      for (const p of inStock) {
+        html += renderPartCard(p);
       }
     }
+
+    // Секция "История заказов" (свёрнутая)
+    if (history.length) {
+      html += `<div class="history-toggle ${state.historyOpen?'open':''}" id="historyToggle">
+        <span>📜 История заказов (${history.length})</span>
+        <span class="arrow">▼</span>
+      </div>`;
+      if (state.historyOpen) {
+        for (const p of history) {
+          html += renderPartCard(p, true);
+        }
+      }
+    }
+
     $('#content').innerHTML = html;
 
     $('#tabParts').onclick = () => { state.whTab = 'parts'; render(); };
@@ -394,7 +428,28 @@ function renderWarehouse() {
     if (si) si.oninput = e => { state.search = e.target.value; const pos = e.target.selectionStart; renderWarehouse(); const ni = $('#searchInput'); if (ni) { ni.focus(); ni.setSelectionRange(pos, pos); } };
     $$('[data-part]').forEach(el => el.onclick = (e) => { if (e.target.closest('[data-pickup]')) return; openPartModal(el.dataset.part); });
     $$('[data-pickup]').forEach(el => el.onclick = (e) => { e.stopPropagation(); openPickupDialog(el.dataset.pickup); });
+    const ht = $('#historyToggle');
+    if (ht) ht.onclick = () => { state.historyOpen = !state.historyOpen; renderWarehouse(); };
   }
+}
+
+function renderPartCard(p, isHistory = false) {
+  const hasOrdered = (p.ordered||0) > 0;
+  const lastOrder = isHistory ? state.orders
+    .filter(o => o.part_id === p.id)
+    .sort((a,b) => new Date(b.ordered_at) - new Date(a.ordered_at))[0] : null;
+
+  let html = `<div class="card" data-part="${p.id}">
+    <h3>${esc(p.name)}</h3>
+    <div style="margin-top:6px">
+      <span class="num-badge ${p.in_stock>0?'':'zero'}">${p.in_stock} шт</span>
+      ${hasOrdered ? `<span class="num-badge ordered">заказано: ${p.ordered}</span>` : ''}
+      ${p.price_unit && !isHistory ? `<span class="num-badge" style="background:#e5e7eb;color:#374151">${money(p.price_unit)}</span>` : ''}
+    </div>
+    ${isHistory && lastOrder ? `<div class="sub" style="margin-top:6px;font-size:12px">Последний заказ: ${money(lastOrder.total)}, ${esc(lastOrder.shop_label || '—')}, ${fmtDay(lastOrder.ordered_at)}</div>` : ''}
+    ${hasOrdered ? `<div style="margin-top:10px"><button class="btn success small" data-pickup="${p.id}">🟢 Забрал</button></div>` : ''}
+  </div>`;
+  return html;
 }
 
 function renderTools(tabsHtml) {
@@ -1285,6 +1340,7 @@ $('#backBtn').onclick = () => {
   if (state.view === 'garage') state.garageCat = null;
   if (state.view === 'warehouse') state.whCat = null;
   state.search = '';
+  state.historyOpen = false;
   render();
 };
 
@@ -1304,6 +1360,7 @@ $$('nav button').forEach(b => b.onclick = () => {
   state.search = '';
   state.garageCat = null;
   state.whCat = null;
+  state.historyOpen = false;
   render();
 });
 
