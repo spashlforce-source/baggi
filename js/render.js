@@ -188,11 +188,11 @@ function renderWarehouseParts(tabsHtml) {
   else allParts = state.parts.filter(p => (p.category_ids || []).includes(state.whCat));
   allParts = allParts.filter(p => !q || p.name.toLowerCase().includes(q));
 
+  // 📦 В наличии: есть на складе ИЛИ едет
   const inStock = allParts.filter(p => (p.in_stock || 0) > 0 || (p.ordered || 0) > 0);
-  const history = allParts.filter(p => {
-    if ((p.in_stock || 0) > 0 || (p.ordered || 0) > 0) return false;
-    return state.orders.some(o => o.part_id === p.id);
-  });
+
+  // 📜 История: ВСЕ, у кого есть хоть один заказ (даже если сейчас в наличии)
+  const history = allParts.filter(p => state.orders.some(o => o.part_id === p.id));
 
   let html = tabsHtml;
   html += `<input class="search" id="searchInput" placeholder="Поиск запчастей..." value="${esc(state.search)}">`;
@@ -240,14 +240,20 @@ function renderWarehouseParts(tabsHtml) {
 
 function renderPartCard(p, isHistory = false) {
   const hasOrdered = (p.ordered || 0) > 0;
+  const hasStock = (p.in_stock || 0) > 0;
   const lastOrder = isHistory
     ? state.orders.filter(o => o.part_id === p.id).sort((a, b) => new Date(b.ordered_at) - new Date(a.ordered_at))[0]
     : null;
 
+  // В карточке истории — если есть наличие, показываем зелёным
+  const stockLine = isHistory && hasStock
+    ? `<span class="num-badge" style="background:#dcfce7;color:#166534">${p.in_stock} шт на складе</span>`
+    : `<span class="num-badge ${hasStock ? '' : 'zero'}">${p.in_stock} шт</span>`;
+
   return `<div class="card" data-part="${p.id}">
     <h3>${esc(p.name)}</h3>
     <div style="margin-top:6px">
-      <span class="num-badge ${p.in_stock > 0 ? '' : 'zero'}">${p.in_stock} шт</span>
+      ${stockLine}
       ${hasOrdered ? `<span class="num-badge ordered">заказано: ${p.ordered}</span>` : ''}
       ${p.price_unit && !isHistory ? `<span class="num-badge" style="background:#e5e7eb;color:#374151">${money(p.price_unit)}</span>` : ''}
     </div>
