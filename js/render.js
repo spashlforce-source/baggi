@@ -5,7 +5,6 @@
 import { state, techStatus } from './state.js';
 import { esc, fmtDate, fmtDay, money, $, $$ } from './utils.js';
 
-// Точка входа — определяет, что рендерить
 export function render() {
   const titles = { garage: 'Гараж', warehouse: 'Склад', logs: 'Логи' };
   let title = titles[state.view];
@@ -191,8 +190,20 @@ function renderWarehouseParts(tabsHtml) {
   // 📦 В наличии: есть на складе ИЛИ едет
   const inStock = allParts.filter(p => (p.in_stock || 0) > 0 || (p.ordered || 0) > 0);
 
-  // 📜 История: ВСЕ, у кого есть хоть один заказ (даже если сейчас в наличии)
-  const history = allParts.filter(p => state.orders.some(o => o.part_id === p.id));
+  // 📜 История: всё, чего сейчас нет (0 шт и не заказано) — и заказы, и списания
+  const history = allParts.filter(p => (p.in_stock || 0) === 0 && (p.ordered || 0) === 0);
+
+  // Сортируем историю: сначала с заказами, потом с установками, потом пустые
+  history.sort((a, b) => {
+    const aOrders = state.orders.filter(o => o.part_id === a.id).length;
+    const bOrders = state.orders.filter(o => o.part_id === b.id).length;
+    const aInst = state.repairParts.filter(rp => rp.part_id === a.id).length;
+    const bInst = state.repairParts.filter(rp => rp.part_id === b.id).length;
+    const aScore = (aOrders > 0 ? 2 : 0) + (aInst > 0 ? 1 : 0);
+    const bScore = (bOrders > 0 ? 2 : 0) + (bInst > 0 ? 1 : 0);
+    if (aScore !== bScore) return bScore - aScore;
+    return a.name.localeCompare(b.name);
+  });
 
   let html = tabsHtml;
   html += `<input class="search" id="searchInput" placeholder="Поиск запчастей..." value="${esc(state.search)}">`;
@@ -206,7 +217,7 @@ function renderWarehouseParts(tabsHtml) {
 
   if (history.length) {
     html += `<div class="history-toggle ${state.historyOpen ? 'open' : ''}" id="historyToggle">
-      <span>📜 История заказов (${history.length})</span>
+      <span>📜 История (${history.length})</span>
       <span class="arrow">▼</span>
     </div>`;
     if (state.historyOpen) {
@@ -241,23 +252,32 @@ function renderWarehouseParts(tabsHtml) {
 function renderPartCard(p, isHistory = false) {
   const hasOrdered = (p.ordered || 0) > 0;
   const hasStock = (p.in_stock || 0) > 0;
+
+  // Что было в истории:
   const lastOrder = isHistory
     ? state.orders.filter(o => o.part_id === p.id).sort((a, b) => new Date(b.ordered_at) - new Date(a.ordered_at))[0]
     : null;
+  const lastInstall = isHistory
+    ? state.repairParts.filter(rp => rp.part_id === p.id).sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0]
+    : null;
 
-  // В карточке истории — если есть наличие, показываем зелёным
-  const stockLine = isHistory && hasStock
-    ? `<span class="num-badge" style="background:#dcfce7;color:#166534">${p.in_stock} шт на складе</span>`
-    : `<span class="num-badge ${hasStock ? '' : 'zero'}">${p.in_stock} шт</span>`;
+  // Информационная строка в истории
+  let historyInfo = '';
+  if (isHistory && lastOrder) {
+    historyInfo = `Последний заказ: ${money(lastOrder.total)}, ${esc(lastOrder.shop_label || '—')}, ${fmtDay(lastOrder.ordered_at)}`;
+  } else if (isHistory && lastInstall) {
+    const tech = state.techs.find(t => t.id === lastInstall.tech_id);
+    historyInfo = `Установлено: ${lastInstall.qty} шт${tech ? ' на «' + esc(tech.name) + '»' : ''}, ${fmtDay(lastInstall.created_at)}`;
+  }
 
   return `<div class="card" data-part="${p.id}">
     <h3>${esc(p.name)}</h3>
     <div style="margin-top:6px">
-      ${stockLine}
+      <span class="num-badge ${hasStock ? '' : 'zero'}">${p.in_stock} шт</span>
       ${hasOrdered ? `<span class="num-badge ordered">заказано: ${p.ordered}</span>` : ''}
       ${p.price_unit && !isHistory ? `<span class="num-badge" style="background:#e5e7eb;color:#374151">${money(p.price_unit)}</span>` : ''}
     </div>
-    ${isHistory && lastOrder ? `<div class="sub" style="margin-top:6px;font-size:12px">Последний заказ: ${money(lastOrder.total)}, ${esc(lastOrder.shop_label || '—')}, ${fmtDay(lastOrder.ordered_at)}</div>` : ''}
+    ${historyInfo ? `<div class="sub" style="margin-top:6px;font-size:12px">${historyInfo}</div>` : ''}
     ${hasOrdered ? `<div style="margin-top:10px"><button class="btn success small" data-pickup="${p.id}">🟢 Забрал</button></div>` : ''}
   </div>`;
 }
