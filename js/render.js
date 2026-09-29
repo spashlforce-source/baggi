@@ -190,10 +190,9 @@ function renderWarehouseParts(tabsHtml) {
   // 📦 В наличии: есть на складе ИЛИ едет
   const inStock = allParts.filter(p => (p.in_stock || 0) > 0 || (p.ordered || 0) > 0);
 
-  // 📜 История: всё, чего сейчас нет (0 шт и не заказано) — и заказы, и списания
+  // 📜 История: всё, чего сейчас нет (0 шт и не заказано)
   const history = allParts.filter(p => (p.in_stock || 0) === 0 && (p.ordered || 0) === 0);
 
-  // Сортируем историю: сначала с заказами, потом с установками, потом пустые
   history.sort((a, b) => {
     const aOrders = state.orders.filter(o => o.part_id === a.id).length;
     const bOrders = state.orders.filter(o => o.part_id === b.id).length;
@@ -253,7 +252,6 @@ function renderPartCard(p, isHistory = false) {
   const hasOrdered = (p.ordered || 0) > 0;
   const hasStock = (p.in_stock || 0) > 0;
 
-  // Что было в истории:
   const lastOrder = isHistory
     ? state.orders.filter(o => o.part_id === p.id).sort((a, b) => new Date(b.ordered_at) - new Date(a.ordered_at))[0]
     : null;
@@ -261,7 +259,6 @@ function renderPartCard(p, isHistory = false) {
     ? state.repairParts.filter(rp => rp.part_id === p.id).sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0]
     : null;
 
-  // Информационная строка в истории
   let historyInfo = '';
   if (isHistory && lastOrder) {
     historyInfo = `Последний заказ: ${money(lastOrder.total)}, ${esc(lastOrder.shop_label || '—')}, ${fmtDay(lastOrder.ordered_at)}`;
@@ -331,7 +328,7 @@ function renderOrders(tabsHtml) {
   });
 }
 
-// ============ ИНСТРУМЕНТЫ ============
+// ============ ИНСТРУМЕНТЫ (компактный вид) ============
 function renderTools(tabsHtml) {
   const q = state.search.toLowerCase();
   const list = state.tools.filter(t => !q || t.name.toLowerCase().includes(q));
@@ -344,9 +341,8 @@ function renderTools(tabsHtml) {
   } else {
     for (const t of list) {
       html += `<div class="card" data-tool="${t.id}">
-        <h3>${esc(t.name)}</h3>
-        <div class="sub">Куплен: ${fmtDay(t.purchase_date)}${t.shop ? ' · ' + esc(t.shop) : ''}</div>
-        ${t.price ? `<div style="margin-top:6px"><span class="num-badge" style="background:#e5e7eb;color:#374151">${money(t.price)}</span></div>` : ''}
+        <h3 style="margin:0">${esc(t.name)}</h3>
+        ${t.buyer_name ? `<div class="sub" style="margin-top:4px;font-size:12px;color:#888">Купил: ${esc(t.buyer_name)}</div>` : ''}
       </div>`;
     }
   }
